@@ -6,7 +6,7 @@ React Next.js app - inside `frontend` directory.
 
 ## Foundry - Forge
 
-Use wsl on Windows.
+Use wsl on Windows. TDD will probably be the best - write tests first, then code.
 
 `curl -L https://foundry.paradigm.xyz | bash`
 `foundryup`

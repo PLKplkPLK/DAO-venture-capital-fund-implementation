@@ -2,17 +2,17 @@
 pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
-import {Counter} from "../src/Counter.sol";
+import {HedgeFundDAO} from "../src/DAO.sol";
 
-contract CounterScript is Script {
-    Counter public counter;
+contract DAOScript is Script {
+    HedgeFundDAO public dao;
 
     function setUp() public {}
 
     function run() public {
         vm.startBroadcast();
 
-        counter = new Counter();
+        dao = new HedgeFundDAO();
 
         vm.stopBroadcast();
     }
