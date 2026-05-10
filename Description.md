@@ -4,7 +4,7 @@ In this project we want to create immitation of the DAO (the one that got hacked
 A public hedge fund, where users deposit ETH and can vote what stocks to buy.
 
 Inside of the `frontend/` directory there's React project. It should be very simple. In `frontend/bc` there are example files of how the app should be connected with "backend".
-Inside of the `forge/` directory there's forge project - our smart contracts. Use ERC20.
+Inside of the `forge/` directory there's forge project - our smart contracts. Use ERC20. Everything in contracts should be written using the TDD technique.
 
 # This is NOT the Next.js you know
 

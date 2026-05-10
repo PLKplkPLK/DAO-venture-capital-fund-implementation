@@ -22,18 +22,18 @@ contract HedgeFundDAO {
     mapping(uint256 => Proposal) public proposals;
 
     function deposit() external payable {
-        // user deposits ETH -> more totalShares
+        // TODO user deposits ETH -> more totalShares
     }
 
     function createProposal(Stock stock) external {
-        // Anyone can propose what to buy?
+        // TODO Anyone can propose what to buy?
     }
 
     function vote(uint256 proposalId, bool support) external {
-        // Vote for proposal
+        // TODO Vote for proposal
     }
 
     function executeProposal(uint256 proposalId) external {
-        // If endTime and more yes votes
+        // TODO If endTime and more yes votes
     }
 }
