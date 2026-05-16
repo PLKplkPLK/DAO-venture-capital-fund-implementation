@@ -1,5 +1,5 @@
 "use client";
-import { SyntheticEvent, useState } from "react";
+import { SyntheticEvent, useEffect, useState } from "react";
 
 import { depositToDao, withdrawFromDao } from "./bc/daoContract";
 import Balance from "./components/balance";
@@ -42,6 +42,16 @@ export default function Home() {
     }
   };
 
+  useEffect(() => {
+    if (!statusMessage) return;
+
+    const timer = window.setTimeout(() => {
+      setStatusMessage("");
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [statusMessage]);
+
   return (
     <div
       style={{
@@ -59,8 +69,36 @@ export default function Home() {
         }}
       >
         <h1>HF DAO</h1>
-        <Balance></Balance>
+        <Balance />
       </header>
+
+      <div
+        style={{
+          minHeight: "2.5rem",
+          marginBottom: "1rem",
+        }}
+      >
+        <p
+          style={{
+            color: "green",
+            fontWeight: "bold",
+            margin: 0,
+            minHeight: "1rem",
+          }}
+        >
+          {statusMessage || "\u00A0"}
+        </p>
+        <p
+          style={{
+            color: "red",
+            fontWeight: "bold",
+            margin: 0,
+            minHeight: "1rem",
+          }}
+        >
+          {errorMessage || "\u00A0"}
+        </p>
+      </div>
 
       <div style={{ display: "flex", gap: "2rem", marginBottom: "2rem" }}>
         {/* Deposit Section */}
