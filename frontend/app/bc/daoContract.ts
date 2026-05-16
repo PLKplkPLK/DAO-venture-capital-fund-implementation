@@ -64,6 +64,52 @@ export async function getUserDaoBalance(userAddress: string): Promise<string> {
   return ethers.formatEther(balanceWei); // Format Wei to ETH
 }
 
+export type DaoBalances = {
+  userBalance: string;
+  fundTotal: string;
+};
+
+export async function getBalances(): Promise<DaoBalances> {
+  const browserProvider = await getBrowserProvider();
+  const userAddress = await getUserAddress();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
+
+  const [balanceWei, fundBalance] = await Promise.all([
+    contract.balanceOf(userAddress),
+    browserProvider.getBalance(getContractAddress()),
+  ]);
+
+  return {
+    userBalance: ethers.formatEther(balanceWei),
+    fundTotal: ethers.formatEther(fundBalance),
+  };
+}
+
+export async function subscribeToTransferEvents(
+  onTransfer: (from: string, to: string, value: string) => void,
+): Promise<() => void> {
+  const provider = await getBrowserProvider();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    provider,
+  );
+
+  const listener = (from: string, to: string, value: bigint) => {
+    onTransfer(from, to, ethers.formatEther(value));
+  };
+
+  contract.on("Transfer", listener);
+
+  return () => {
+    contract.off("Transfer", listener);
+  };
+}
+
 export async function depositToDao(amountEth: string) {
   if (!amountEth || Number(amountEth) <= 0) {
     throw new Error("Enter a deposit amount greater than 0.");

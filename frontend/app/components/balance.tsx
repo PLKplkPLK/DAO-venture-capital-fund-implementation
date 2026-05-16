@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  getUserAddress,
-  getUserDaoBalance,
-  getFundTotalBalance,
-} from "../bc/daoContract";
+import { getBalances, subscribeToTransferEvents } from "../bc/daoContract";
 
 export default function Balance() {
   const [balance, setBalance] = useState<string>("0.00");
@@ -13,28 +9,42 @@ export default function Balance() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
-  useEffect(() => {
-    const fetchBalances = async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const fetchBalances = async () => {
+    try {
+      setError("");
+      const { userBalance, fundTotal } = await getBalances();
 
-        // Get user's and fund's balance
-        const userAddress = await getUserAddress();
-        const userBalance = await getUserDaoBalance(userAddress);
-        setBalance(Number(userBalance).toFixed(2));
-        const fundEth = await getFundTotalBalance();
-        setFundTotal(Number(fundEth).toFixed(2));
+      setBalance(Number(userBalance).toFixed(2));
+      setFundTotal(Number(fundTotal).toFixed(2));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch balance");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cleanupTransferListener: (() => void) | null = null;
+
+    const setupEventListener = async () => {
+      try {
+        await fetchBalances();
+
+        cleanupTransferListener = await subscribeToTransferEvents(async () => {
+          await fetchBalances();
+        });
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch balance",
-        );
-      } finally {
-        setLoading(false);
+        console.error("Event listener setup failed:", err);
       }
     };
 
-    fetchBalances();
+    setupEventListener();
+
+    return () => {
+      if (cleanupTransferListener) {
+        cleanupTransferListener();
+      }
+    };
   }, []);
 
   if (loading) {

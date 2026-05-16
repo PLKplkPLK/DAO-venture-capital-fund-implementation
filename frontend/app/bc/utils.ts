@@ -9,6 +9,7 @@ const DAO_CONTRACT_ABI = [
   "function buyShares() payable",
   "function retrieveShares(uint256 amount)",
   "function balanceOf(address account) view returns (uint256)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
 ];
 
 function getProvider() {
