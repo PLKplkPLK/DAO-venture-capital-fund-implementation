@@ -2,9 +2,9 @@
 pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
-import {HedgeFundDAO} from "../src/DAO.sol";
+import {HedgeFundDAO} from "../src/HFD.sol";
 
-contract DAOScript is Script {
+contract HFDAOScript is Script {
     HedgeFundDAO public dao;
 
     function setUp() public {}

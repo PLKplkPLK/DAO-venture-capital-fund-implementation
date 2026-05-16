@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The DAO",
+  title: "HF DAO",
   description: "Blockchain Technology project",
 };
 

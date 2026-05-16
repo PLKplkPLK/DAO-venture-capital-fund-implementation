@@ -4,7 +4,7 @@ React Next.js app - inside `frontend` directory.
 
 `cd frontend && npm run dev`
 
-## Foundry - Forge
+## Smart Contracts - Foundry - Forge
 
 Use wsl on Windows. TDD will probably be the best - write tests first, then code.
 
@@ -12,5 +12,13 @@ Use wsl on Windows. TDD will probably be the best - write tests first, then code
 `foundryup`
 
 Inside `forge`:
-`forge build`
-`forge test`
+
+```sh
+forge build
+forge test
+forge create src/HFD.sol:HedgeFundDAO --rpc-url http://127.0.0.1:8545 --private-key 0xPrivateKey --broadcast
+```
+
+#### Local ETH node - Foundry - Anvil
+
+`anvil`
