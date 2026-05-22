@@ -4,6 +4,8 @@ import { SyntheticEvent, useEffect, useState } from "react";
 
 import { depositToDao, withdrawFromDao } from "../bc/daoContract";
 import Balance from "./balance";
+import Proposals from "./proposals";
+import StockCharts from "./StockCharts";
 
 export default function HomeClient() {
   const [depositAmount, setDepositAmount] = useState("");
@@ -56,7 +58,7 @@ export default function HomeClient() {
   return (
     <div
       style={{
-        maxWidth: "800px",
+        maxWidth: "900px",
         margin: "0 auto",
         padding: "2rem",
         fontFamily: "sans-serif",
@@ -69,7 +71,7 @@ export default function HomeClient() {
           marginBottom: "2rem",
         }}
       >
-        <h1>HF DAO</h1>
+        <h1>HF DAO - Hedge Fund Management</h1>
         <Balance />
       </header>
 
@@ -187,26 +189,10 @@ export default function HomeClient() {
         </section>
       </div>
 
-      {/* Voting Section Scaffold */}
-      <section
-        style={{ padding: "1rem", background: "#f9f9f9", borderRadius: "8px" }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <h2>Active Proposals</h2>
-          <button style={{ padding: "0.5rem 1rem", cursor: "pointer" }}>
-            + Create Proposal
-          </button>
-        </div>
-        <p style={{ color: "#666" }}>
-          No active proposals yet. Deposit ETH to gain voting power!
-        </p>
-      </section>
+      {/* Stock Market Prices */}
+      <StockCharts />
+
+      <Proposals />
     </div>
   );
 }

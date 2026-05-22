@@ -19,6 +19,9 @@ forge test
 forge create src/HFD.sol:HedgeFundDAO --rpc-url http://127.0.0.1:8545 --private-key "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" --broadcast
 ```
 
+wsl and forge one-liner:
+`wsl -e sh -lc "cd /mnt/d/Pobrane/DAO-venture-capital-fund-implementation/forge && /home/pelek/.foundry/bin/forge test"`
+
 #### Local ETH node - Foundry - Anvil
 
 Use wsl on Windows.
