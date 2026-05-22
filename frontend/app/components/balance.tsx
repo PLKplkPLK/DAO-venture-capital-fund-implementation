@@ -62,8 +62,8 @@ export default function Balance() {
 
   return (
     <p>
-      Your Balance: <strong>{balance} ETH?</strong> | Fund Total:{" "}
-      <strong>{fundTotal} ETH</strong>
+      Your Balance: <strong>{balance} HFT</strong> | Fund Total:{" "}
+      <strong>{fundTotal} HFT</strong>
     </p>
   );
 }

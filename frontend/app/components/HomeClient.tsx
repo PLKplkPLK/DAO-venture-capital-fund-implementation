@@ -139,7 +139,7 @@ export default function HomeClient() {
                 borderRadius: "5px",
               }}
             >
-              Deposit & Get HF Tokens
+              Get HF Tokens
             </button>
           </form>
         </section>
@@ -157,7 +157,7 @@ export default function HomeClient() {
           <form onSubmit={handleWithdraw}>
             <input
               type="number"
-              placeholder="Amount in DAO"
+              placeholder="Amount in HFT"
               value={withdrawAmount}
               onChange={(e) =>
                 setWithdrawAmount((e.target as HTMLInputElement).value)
@@ -181,7 +181,7 @@ export default function HomeClient() {
                 borderRadius: "5px",
               }}
             >
-              Burn DAO & Withdraw ETH
+              Withdraw ETH
             </button>
           </form>
         </section>
