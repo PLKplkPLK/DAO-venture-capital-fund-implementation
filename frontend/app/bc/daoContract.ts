@@ -69,6 +69,32 @@ export type DaoBalances = {
   fundTotal: string;
 };
 
+export type Proposal = {
+  id: number;
+  toBuy: number;
+  buyAmount: string;
+  toSell: number;
+  sellAmount: string;
+  label: string;
+  sellLabel: string | null;
+  yesVotes: string;
+  noVotes: string;
+  snapshotBlock: bigint;
+  endTime: bigint;
+  executed: boolean;
+};
+
+const STOCK_LABELS = ["S&P 500", "Wheat", "Apple"];
+
+function getStockLabel(stock: number) {
+  return STOCK_LABELS[stock] ?? `Stock #${stock}`;
+}
+
+export const STOCKS = STOCK_LABELS.map((label, index) => ({
+  value: index,
+  label,
+}));
+
 export async function getBalances(): Promise<DaoBalances> {
   const browserProvider = await getBrowserProvider();
   const userAddress = await getUserAddress();
@@ -87,6 +113,82 @@ export async function getBalances(): Promise<DaoBalances> {
     userBalance: ethers.formatEther(balanceWei),
     fundTotal: ethers.formatEther(fundBalance),
   };
+}
+
+export async function getProposalCount(): Promise<number> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
+  const count = await contract.nextProposalId();
+  return Number(count);
+}
+
+export async function getProposal(id: number): Promise<Proposal> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
+
+  const result = await contract.proposals(id);
+  return {
+    id: Number(result.id),
+    toBuy: Number(result.toBuy),
+    buyAmount: ethers.formatEther(result.buyAmount),
+    toSell: Number(result.toSell),
+    sellAmount: ethers.formatEther(result.sellAmount),
+    label: getStockLabel(Number(result.toBuy)),
+    sellLabel:
+      Number(result.toSell) < 3 ? getStockLabel(Number(result.toSell)) : null,
+    yesVotes: ethers.formatEther(result.yesVotes),
+    noVotes: ethers.formatEther(result.noVotes),
+    snapshotBlock: result.snapshotBlock as bigint,
+    endTime: result.endTime as bigint,
+    executed: result.executed,
+  };
+}
+
+export async function fetchAllProposals(): Promise<Proposal[]> {
+  const count = await getProposalCount();
+  const proposalPromises = Array.from({ length: count }, (_, index) =>
+    getProposal(index),
+  );
+  return Promise.all(proposalPromises);
+}
+
+export async function createProposal(
+  toBuy: number,
+  buyAmount: string,
+  toSell: number,
+  sellAmount: string,
+): Promise<string> {
+  const signer = await getSigner();
+  const daoContract = await getDaoContract(signer);
+  const buyAmountWei = ethers.parseEther(buyAmount);
+  const sellAmountWei = ethers.parseEther(sellAmount);
+  const tx = await daoContract.createProposal(
+    toBuy,
+    buyAmountWei,
+    toSell,
+    sellAmountWei,
+  );
+  await tx.wait();
+  return "Proposal created successfully.";
+}
+
+export async function voteOnProposal(
+  proposalId: number,
+  choice: number,
+): Promise<string> {
+  const signer = await getSigner();
+  const daoContract = await getDaoContract(signer);
+  const tx = await daoContract.vote(proposalId, choice);
+  await tx.wait();
+  return "Vote submitted successfully.";
 }
 
 export async function subscribeToTransferEvents(
@@ -118,10 +220,23 @@ export async function depositToDao(amountEth: string) {
   try {
     const signer = await getSigner();
     const daoContract = await getDaoContract(signer);
+    const userAddress = await signer.getAddress();
     const value = ethers.parseEther(amountEth);
 
+    // 1. Execute the Deposit
     const tx = await daoContract.buyShares({ value });
     await tx.wait();
+
+    // 2. Check if they have activated their voting power yet
+    const currentDelegate = await daoContract.delegates(userAddress);
+
+    // If currentDelegate is the zero address, they haven't delegated to themselves
+    if (currentDelegate === ethers.ZeroAddress) {
+      // Automatically trigger self-delegation
+      const delegateTx = await daoContract.delegate(userAddress);
+      await delegateTx.wait();
+      return `Deposit successful and voting power automatically activated!`;
+    }
 
     return `Deposit of ${amountEth} ETH sent.`;
   } catch (error) {
@@ -139,12 +254,70 @@ export async function withdrawFromDao(amountDao: string) {
     const daoContract = await getDaoContract(signer);
     const withdrawalAmount = ethers.parseUnits(amountDao, 18);
 
-    // Solidity: function retrieveShares(uint256 amount)
-    const tx = await daoContract.retrieveShares(withdrawalAmount);
+    const tx = await daoContract.retrieveEth(withdrawalAmount);
     await tx.wait();
 
     return `Withdraw request for ${amountDao} DAO submitted.`;
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
+}
+
+export async function getFundTotalValue(): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
+
+  try {
+    const totalValue = await contract.getFundTotalValue();
+    return ethers.formatEther(totalValue);
+  } catch (error) {
+    console.error("Error getting fund total value:", error);
+    return "0";
+  }
+}
+
+export async function getPortfolioValue(): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
+
+  try {
+    const value = await contract.getPortfolioValue();
+    return ethers.formatEther(value);
+  } catch (error) {
+    console.error("Error getting portfolio value:", error);
+    return "0";
+  }
+}
+
+export async function getPortfolioStock(stock: number): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
+
+  try {
+    const amount = await contract.getPortfolioStock(stock);
+    return ethers.formatEther(amount);
+  } catch (error) {
+    console.error("Error getting portfolio stock:", error);
+    return "0";
+  }
+}
+
+export async function getAllPortfolioStocks(): Promise<Record<string, string>> {
+  const holdings: Record<string, string> = {};
+  for (let i = 0; i < 3; i++) {
+    holdings[STOCK_LABELS[i]] = await getPortfolioStock(i);
+  }
+  return holdings;
 }

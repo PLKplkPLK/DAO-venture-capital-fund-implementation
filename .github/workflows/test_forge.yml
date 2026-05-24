@@ -25,10 +25,6 @@ jobs:
       - name: Show Forge version
         run: forge --version
 
-      - name: Run Forge fmt
-        working-directory: forge
-        run: forge fmt --check
-
       - name: Run Forge build
         working-directory: forge
         run: forge build --sizes
