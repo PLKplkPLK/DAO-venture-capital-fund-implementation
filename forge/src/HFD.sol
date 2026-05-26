@@ -5,19 +5,13 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
-enum Stock {
-    SP500,
-    Wheat,
-    Apple
-}
-
 interface IPriceOracle {
     function getPrice(uint8 stock) external view returns (uint256);
 }
 
 struct Proposal {
     uint256 id;
-    uint8 toBuy;           // Which stock to buy
+    uint8 toBuy;           // Which stock to buy (255 = none)
     uint256 buyAmount;     // ETH to spend on buying
     uint8 toSell;          // Which stock to sell (255 = none)
     uint256 sellAmount;    // Amount of stock to sell
@@ -29,38 +23,71 @@ struct Proposal {
 }
 
 contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
-    constructor() ERC20("HF Token", "HF") ERC20Permit("HF Token") {}
-
     uint256 public nextProposalId;
-    mapping(uint256 => Proposal) public proposals;
+    uint256 public cashBalance; // Tracks uninvested ETH inside the fund
+
     // 0 = None, 1 = Yes, 2 = No
+    mapping(uint256 => Proposal) public proposals;
     mapping(uint256 => mapping(address => uint8)) public userVotes;
-    
-    // Portfolio: tracks amount of each stock held by the fund
     mapping(uint8 => uint256) public portfolio;
-    
-    // Price oracle address (can be set by owner/governance)
+
     IPriceOracle public priceOracle;
+    address public owner; 
 
     event ProposalCreated(uint256 indexed proposalId, uint8 toBuy, uint256 buyAmount, uint8 toSell, uint256 sellAmount);
     event Voted(uint256 indexed proposalId, address indexed voter, uint8 choice, uint256 weight);
-    event ProposalExecuted(uint256 indexed proposalId);
+    event ProposalExecuted(uint256 indexed proposalId, uint256 ethSpent, uint256 ethGained);
     event PriceOracleUpdated(address newOracle);
 
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the owner");
+        _;
+    }
+
+    constructor() ERC20("HF Token", "HF") ERC20Permit("HF Token") {
+        owner = msg.sender;
+    }
+
     function buyShares() external payable {
-        require(msg.value > 0, "Need to send $ bro");
-        _mint(msg.sender, msg.value);
+        require(msg.value > 0, "Need to send ETH");
+
+        uint256 totalValue = getFundTotalValue();
+        uint256 supply = totalSupply();
+        uint256 tokensToMint;
+
+        if (supply == 0 || totalValue == 0) {
+            tokensToMint = msg.value;
+        } else {
+            // Price tokens proportional to the current net value of the fund
+            tokensToMint = (msg.value * supply) / (totalValue - msg.value);
+        }
+
+        cashBalance += msg.value;
+        _mint(msg.sender, tokensToMint);
+
+        if (delegates(msg.sender) == address(0)) {
+            _delegate(msg.sender, msg.sender);
+        }
     }
 
-    function retrieveEth(uint256 amount) external payable {
-        require(amount <= balanceOf(msg.sender), "Not enough $ in HF");
-        _burn(msg.sender, amount);
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "ETH transfer failed, unlucky");
+    function retrieveEth(uint256 tokenAmount) external {
+        require(tokenAmount <= balanceOf(msg.sender), "Not enough tokens");
+
+        uint256 totalValue = getFundTotalValue();
+        uint256 supply = totalSupply();
+
+        uint256 ethToReturn = (tokenAmount * totalValue) / supply;
+        require(ethToReturn <= cashBalance, "Not enough liquid ETH in fund; sell assets first");
+
+        cashBalance -= ethToReturn;
+        _burn(msg.sender, tokenAmount);
+
+        (bool success, ) = msg.sender.call{value: ethToReturn}("");
+        require(success, "ETH transfer failed");
     }
 
-    function setPriceOracle(address _oracle) external {
-        require(_oracle != address(0), "Invalid oracle address");
+    function setPriceOracle(address _oracle) external onlyOwner {
+        require(_oracle != address(0), "Invalid address");
         priceOracle = IPriceOracle(_oracle);
         emit PriceOracleUpdated(_oracle);
     }
@@ -71,11 +98,19 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         uint8 toSell,
         uint256 sellAmount
     ) external {
-        require(toBuy < 3, "Invalid stock to buy");
-        require(buyAmount > 0, "Buy amount must be > 0");
+        if (toBuy < 3) {
+            require(buyAmount > 0, "Buy amount must be > 0");
+        } else {
+            require(toBuy == 255, "Invalid buy asset ID");
+            require(buyAmount == 0, "Buy amount must be 0 if not buying");
+        }
+
         if (toSell < 3) {
-            require(sellAmount > 0, "Sell amount must be > 0 if selling");
+            require(sellAmount > 0, "Sell amount must be > 0");
             require(sellAmount <= portfolio[toSell], "Not enough stock to sell");
+        } else {
+            require(toSell == 255, "Invalid sell asset ID");
+            require(sellAmount == 0, "Sell amount must be 0 if not selling");
         }
 
         proposals[nextProposalId] = Proposal({
@@ -86,8 +121,8 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             sellAmount: sellAmount,
             yesVotes: 0,
             noVotes: 0,
-            snapshotBlock: block.number,
-            endTime: block.timestamp + 3 days,
+            snapshotBlock: block.number - 1, // Look back 1 block to secure voting power
+            endTime: block.timestamp + 5 minutes,
             executed: false
         });
 
@@ -97,95 +132,90 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
     function vote(uint256 proposalId, uint8 choice) external {
         require(proposalId < nextProposalId, "Proposal does not exist");
-        require(choice == 1 || choice == 2, "Invalid choice: 1=Yes, 2=No");
+        require(choice == 1 || choice == 2, "1=Yes, 2=No");
         Proposal storage proposal = proposals[proposalId];
         require(block.timestamp < proposal.endTime, "Voting has ended");
-        require(proposal.snapshotBlock < block.number, "Vote snapshot is not in the past");
 
-        // Fetch historical voting power at the snapshot block
         uint256 weight = getPastVotes(msg.sender, proposal.snapshotBlock);
         require(weight > 0, "No voting power at snapshot");
 
         uint8 previousChoice = userVotes[proposalId][msg.sender];
         require(previousChoice != choice, "Already voted this way");
 
-        if (previousChoice == 1) {
-            proposal.yesVotes -= weight;
-        } else if (previousChoice == 2) {
-            proposal.noVotes -= weight;
-        }
+        if (previousChoice == 1) proposal.yesVotes -= weight;
+        if (previousChoice == 2) proposal.noVotes -= weight;
 
-        if (choice == 1) {
-            proposal.yesVotes += weight;
-        } else if (choice == 2) {
-            proposal.noVotes += weight;
-        }
+        if (choice == 1) proposal.yesVotes += weight;
+        if (choice == 2) proposal.noVotes += weight;
 
         userVotes[proposalId][msg.sender] = choice;
         emit Voted(proposalId, msg.sender, choice, weight);
     }
 
-    // Get total value of the fund: ETH balance + portfolio value
-    function getFundTotalValue() external view returns (uint256) {
-        uint256 ethBalance = address(this).balance;
-        uint256 portfolioValue = getPortfolioValue();
-        return ethBalance + portfolioValue;
-    }
+    function executeProposal(uint256 proposalId) external {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposalId < nextProposalId, "Proposal missing");
+        require(!proposal.executed, "Already executed");
+        require(block.timestamp >= proposal.endTime, "Voting active");
+        require(proposal.yesVotes > proposal.noVotes, "Proposal failed");
+        require(address(priceOracle) != address(0), "Oracle not configured");
 
-    // Calculate portfolio value in ETH based on oracle prices
-    function getPortfolioValue() public view returns (uint256) {
-        if (address(priceOracle) == address(0)) {
-            return 0; // Oracle not set yet
+        uint256 ethGained = 0;
+        uint256 ethSpent = 0;
+
+        // 1. Process Sells First (to release cash pool liquidity)
+        if (proposal.toSell < 3) {
+            uint256 sellPrice = priceOracle.getPrice(proposal.toSell);
+            ethGained = (proposal.sellAmount * sellPrice) / 1e18;
+            
+            portfolio[proposal.toSell] -= proposal.sellAmount;
+            cashBalance += ethGained;
         }
 
-        uint256 value = 0;
+        // 2. Process Buys
+        if (proposal.toBuy < 3) {
+            ethSpent = proposal.buyAmount;
+            require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
+            
+            uint256 buyPrice = priceOracle.getPrice(proposal.toBuy);
+            uint256 stockGained = (ethSpent * 1e18) / buyPrice;
+            
+            cashBalance -= ethSpent;
+            portfolio[proposal.toBuy] += stockGained;
+        }
+
+        proposal.executed = true;
+        emit ProposalExecuted(proposalId, ethSpent, ethGained);
+    }
+
+    function getFundTotalValue() public view returns (uint256) {
+        return cashBalance + getPortfolioValue();
+    }
+
+    function getPortfolioValue() public view returns (uint256) {
+        if (address(priceOracle) == address(0)) return 0;
+
+        uint256 totalValue = 0;
         for (uint8 i = 0; i < 3; i++) {
-            uint256 stockAmount = portfolio[i];
-            if (stockAmount > 0) {
-                uint256 price = priceOracle.getPrice(i);
-                value += (stockAmount * price) / 1e18; // Assuming prices are in wei
+            uint256 amount = portfolio[i];
+            if (amount > 0) {
+                totalValue += (amount * priceOracle.getPrice(i)) / 1e18;
             }
         }
-        return value;
+        return totalValue;
     }
 
-    // Get amount of specific stock in portfolio
     function getPortfolioStock(uint8 stock) external view returns (uint256) {
         require(stock < 3, "Invalid stock");
         return portfolio[stock];
     }
 
-    // PLACEHOLDER: Execute proposal trades (to be implemented with actual oracle/broker)
-    function executeProposal(uint256 proposalId) external {
-        require(proposalId < nextProposalId, "Proposal does not exist");
-        Proposal storage proposal = proposals[proposalId];
-        require(!proposal.executed, "Already executed");
-        require(block.timestamp >= proposal.endTime, "Voting not ended");
-        require(proposal.yesVotes > proposal.noVotes, "Proposal did not pass");
-
-        // PLACEHOLDER: Actual trade execution would happen here
-        // For now, just mark as executed
-        // In production, this would:
-        // 1. Call oracle/broker API to execute trades
-        // 2. Update portfolio mapping
-        // 3. Handle ETH transfers
-        proposal.executed = true;
-        emit ProposalExecuted(proposalId);
-    }
-
-    function _update(address from, address to, uint256 value) 
-        internal
-        override(ERC20, ERC20Votes)
-    {
+    // Required Overrides
+    function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {
         super._update(from, to, value);
     }
 
-    function nonces(address owner)
-        public
-        view
-        override(ERC20Permit, Nonces)
-        returns (uint256)
-    {
+    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
         return super.nonces(owner);
     }
 }

@@ -16,7 +16,7 @@ export default function Proposals() {
   const [votingProposal, setVotingProposal] = useState<number | null>(null);
   const [newToBuy, setNewToBuy] = useState<number>(0);
   const [newBuyAmount, setNewBuyAmount] = useState<string>("");
-  const [newToSell, setNewToSell] = useState<number>(3); // 3 = none
+  const [newToSell, setNewToSell] = useState<number>(255); // 255 = none
   const [newSellAmount, setNewSellAmount] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -224,7 +224,7 @@ export default function Proposals() {
                   width: "100%",
                 }}
               >
-                <option value={3}>None</option>
+                <option value={255}>None</option>
                 {STOCKS.map((stock) => (
                   <option key={stock.value} value={stock.value}>
                     {stock.label}
@@ -249,7 +249,7 @@ export default function Proposals() {
                 onChange={(e) => setNewSellAmount(e.target.value)}
                 step="0.01"
                 min="0"
-                disabled={newToSell >= 3}
+                disabled={newToSell === 255}
                 style={{
                   padding: "0.5rem",
                   borderRadius: "5px",
@@ -262,10 +262,11 @@ export default function Proposals() {
 
             <button
               type="submit"
-              disabled={creating || newToSell >= 3}
+              disabled={creating || newToSell === 255}
               style={{
                 padding: "0.75rem 1rem",
-                cursor: creating || newToSell >= 3 ? "not-allowed" : "pointer",
+                cursor:
+                  creating || newToSell === 255 ? "not-allowed" : "pointer",
                 border: "solid #d63333 2px",
                 borderRadius: "5px",
                 background: "#d63333",
@@ -319,7 +320,7 @@ export default function Proposals() {
             </h3>
             <div style={{ display: "grid", gap: "1rem" }}>
               {proposals
-                .filter((p) => p.toSell >= 3 || p.sellLabel === null)
+                .filter((p) => p.toSell === 255 || p.sellLabel === null)
                 .map((proposal) => {
                   const ended = Number(proposal.endTime) <= nowSeconds;
                   return (
@@ -362,15 +363,23 @@ export default function Proposals() {
                         }}
                       >
                         <div style={{ fontSize: "0.95rem" }}>
-                          <div style={{ color: "#666", fontSize: "0.85rem" }}>
-                            BUY
-                          </div>
-                          <div style={{ fontWeight: "bold" }}>
-                            {proposal.label}
-                          </div>
-                          <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                            {proposal.buyAmount} ETH
-                          </div>
+                          {proposal.label && (
+                            <>
+                              <div
+                                style={{ color: "#666", fontSize: "0.85rem" }}
+                              >
+                                BUY
+                              </div>
+                              <div style={{ fontWeight: "bold" }}>
+                                {proposal.label}
+                              </div>
+                              <div
+                                style={{ color: "#888", fontSize: "0.85rem" }}
+                              >
+                                {proposal.buyAmount} ETH
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -537,28 +546,40 @@ export default function Proposals() {
                         }}
                       >
                         <div style={{ display: "grid", gap: "0.75rem" }}>
-                          <div>
-                            <div style={{ color: "#666", fontSize: "0.85rem" }}>
-                              BUY
+                          {proposal.label && (
+                            <div>
+                              <div
+                                style={{ color: "#666", fontSize: "0.85rem" }}
+                              >
+                                BUY
+                              </div>
+                              <div style={{ fontWeight: "bold" }}>
+                                {proposal.label}
+                              </div>
+                              <div
+                                style={{ color: "#888", fontSize: "0.85rem" }}
+                              >
+                                {proposal.buyAmount} ETH
+                              </div>
                             </div>
-                            <div style={{ fontWeight: "bold" }}>
-                              {proposal.label}
+                          )}
+                          {proposal.sellLabel && (
+                            <div>
+                              <div
+                                style={{ color: "#666", fontSize: "0.85rem" }}
+                              >
+                                SELL
+                              </div>
+                              <div style={{ fontWeight: "bold" }}>
+                                {proposal.sellLabel}
+                              </div>
+                              <div
+                                style={{ color: "#888", fontSize: "0.85rem" }}
+                              >
+                                {proposal.sellAmount} units
+                              </div>
                             </div>
-                            <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                              {proposal.buyAmount} ETH
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ color: "#666", fontSize: "0.85rem" }}>
-                              SELL
-                            </div>
-                            <div style={{ fontWeight: "bold" }}>
-                              {proposal.sellLabel}
-                            </div>
-                            <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                              {proposal.sellAmount} units
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
 
