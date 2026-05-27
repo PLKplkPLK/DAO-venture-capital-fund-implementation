@@ -161,24 +161,28 @@ export async function fetchAllProposals(): Promise<Proposal[]> {
   return Promise.all(proposalPromises);
 }
 
-export async function createProposal(
+export async function createBuyProposal(
   toBuy: number,
   buyAmount: string,
+): Promise<string> {
+  const signer = await getSigner();
+  const daoContract = await getDaoContract(signer);
+  const buyAmountWei = ethers.parseEther(buyAmount);
+  const tx = await daoContract.createBuyProposal(toBuy, buyAmountWei);
+  await tx.wait();
+  return "Buy proposal created successfully.";
+}
+
+export async function createSellProposal(
   toSell: number,
   sellAmount: string,
 ): Promise<string> {
   const signer = await getSigner();
   const daoContract = await getDaoContract(signer);
-  const buyAmountWei = ethers.parseEther(buyAmount);
   const sellAmountWei = ethers.parseEther(sellAmount);
-  const tx = await daoContract.createProposal(
-    toBuy,
-    buyAmountWei,
-    toSell,
-    sellAmountWei,
-  );
+  const tx = await daoContract.createSellProposal(toSell, sellAmountWei);
   await tx.wait();
-  return "Proposal created successfully.";
+  return "Sell proposal created successfully.";
 }
 
 export async function voteOnProposal(

@@ -24,7 +24,7 @@ struct Proposal {
 
 contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     uint256 public nextProposalId;
-    uint256 public cashBalance; // Tracks uninvested ETH inside the fund
+    uint256 public cashBalance; // Uninvested ETH inside the fund
 
     // 0 = None, 1 = Yes, 2 = No
     mapping(uint256 => Proposal) public proposals;
@@ -92,41 +92,54 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         emit PriceOracleUpdated(_oracle);
     }
 
-    function createProposal(
+    function createBuyProposal(
         uint8 toBuy,
-        uint256 buyAmount,
-        uint8 toSell,
-        uint256 sellAmount
+        uint256 buyAmount
     ) external {
-        if (toBuy < 3) {
-            require(buyAmount > 0, "Buy amount must be > 0");
-        } else {
-            require(toBuy == 255, "Invalid buy asset ID");
-            require(buyAmount == 0, "Buy amount must be 0 if not buying");
-        }
-
-        if (toSell < 3) {
-            require(sellAmount > 0, "Sell amount must be > 0");
-            require(sellAmount <= portfolio[toSell], "Not enough stock to sell");
-        } else {
-            require(toSell == 255, "Invalid sell asset ID");
-            require(sellAmount == 0, "Sell amount must be 0 if not selling");
-        }
+        require(balanceOf(msg.sender) > 1, "Must hold at least 1 DAO token to create proposals");
+        require(toBuy < 3, "Invalid stock to buy");
+        require(buyAmount > 0, "Buy amount must be > 0");
 
         proposals[nextProposalId] = Proposal({
             id: nextProposalId,
             toBuy: toBuy,
             buyAmount: buyAmount,
+            toSell: 255,
+            sellAmount: 0,
+            yesVotes: 0,
+            noVotes: 0,
+            snapshotBlock: block.number - 1,
+            endTime: block.timestamp + 3 minutes,
+            executed: false
+        });
+
+        emit ProposalCreated(nextProposalId, toBuy, buyAmount, 255, 0);
+        nextProposalId++;
+    }
+
+    function createSellProposal(
+        uint8 toSell,
+        uint256 sellAmount
+    ) external {
+        require(balanceOf(msg.sender) > 1, "Must hold at least 1 DAO token to create proposals");
+        require(toSell < 3, "Invalid stock to sell");
+        require(sellAmount > 0, "Sell amount must be > 0");
+        require(sellAmount <= portfolio[toSell], "Not enough stock to sell");
+
+        proposals[nextProposalId] = Proposal({
+            id: nextProposalId,
+            toBuy: 255,
+            buyAmount: 0,
             toSell: toSell,
             sellAmount: sellAmount,
             yesVotes: 0,
             noVotes: 0,
-            snapshotBlock: block.number - 1, // Look back 1 block to secure voting power
-            endTime: block.timestamp + 5 minutes,
+            snapshotBlock: block.number - 1,
+            endTime: block.timestamp + 3 minutes,
             executed: false
         });
 
-        emit ProposalCreated(nextProposalId, toBuy, buyAmount, toSell, sellAmount);
+        emit ProposalCreated(nextProposalId, 255, 0, toSell, sellAmount);
         nextProposalId++;
     }
 
@@ -176,10 +189,10 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         if (proposal.toBuy < 3) {
             ethSpent = proposal.buyAmount;
             require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
-            
+
             uint256 buyPrice = priceOracle.getPrice(proposal.toBuy);
             uint256 stockGained = (ethSpent * 1e18) / buyPrice;
-            
+
             cashBalance -= ethSpent;
             portfolio[proposal.toBuy] += stockGained;
         }
