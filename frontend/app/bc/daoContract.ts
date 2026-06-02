@@ -75,7 +75,7 @@ export type Proposal = {
   buyAmount: string;
   toSell: number;
   sellAmount: string;
-  label: string;
+  label: string | null;
   sellLabel: string | null;
   yesVotes: string;
   noVotes: string;
@@ -141,7 +141,8 @@ export async function getProposal(id: number): Promise<Proposal> {
     buyAmount: ethers.formatEther(result.buyAmount),
     toSell: Number(result.toSell),
     sellAmount: ethers.formatEther(result.sellAmount),
-    label: getStockLabel(Number(result.toBuy)),
+    label:
+      Number(result.toBuy) < 3 ? getStockLabel(Number(result.toBuy)) : null,
     sellLabel:
       Number(result.toSell) < 3 ? getStockLabel(Number(result.toSell)) : null,
     yesVotes: ethers.formatEther(result.yesVotes),
@@ -160,24 +161,28 @@ export async function fetchAllProposals(): Promise<Proposal[]> {
   return Promise.all(proposalPromises);
 }
 
-export async function createProposal(
+export async function createBuyProposal(
   toBuy: number,
   buyAmount: string,
+): Promise<string> {
+  const signer = await getSigner();
+  const daoContract = await getDaoContract(signer);
+  const buyAmountWei = ethers.parseEther(buyAmount);
+  const tx = await daoContract.createBuyProposal(toBuy, buyAmountWei);
+  await tx.wait();
+  return "Buy proposal created successfully.";
+}
+
+export async function createSellProposal(
   toSell: number,
   sellAmount: string,
 ): Promise<string> {
   const signer = await getSigner();
   const daoContract = await getDaoContract(signer);
-  const buyAmountWei = ethers.parseEther(buyAmount);
   const sellAmountWei = ethers.parseEther(sellAmount);
-  const tx = await daoContract.createProposal(
-    toBuy,
-    buyAmountWei,
-    toSell,
-    sellAmountWei,
-  );
+  const tx = await daoContract.createSellProposal(toSell, sellAmountWei);
   await tx.wait();
-  return "Proposal created successfully.";
+  return "Sell proposal created successfully.";
 }
 
 export async function voteOnProposal(
@@ -189,6 +194,20 @@ export async function voteOnProposal(
   const tx = await daoContract.vote(proposalId, choice);
   await tx.wait();
   return "Vote submitted successfully.";
+}
+
+export async function executeProposal(proposalId: number): Promise<string> {
+  const signer = await getSigner();
+  const contract = await getDaoContract(signer);
+  try {
+    const tx = await contract.executeProposal(proposalId);
+    await tx.wait(); // Wait for confirmation block on local network
+    return `Proposal #${proposalId} executed successfully! Portfolio updated.`;
+  } catch (error) {
+    console.error("Execution exception:", error);
+    if (error instanceof Error) throw error;
+    throw new Error(getErrorMessage(error));
+  }
 }
 
 export async function subscribeToTransferEvents(

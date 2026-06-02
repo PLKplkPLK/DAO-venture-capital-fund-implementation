@@ -2,9 +2,11 @@
 
 import { useEffect, useState, SyntheticEvent } from "react";
 import {
-  createProposal,
+  createBuyProposal,
+  createSellProposal,
   fetchAllProposals,
   voteOnProposal,
+  executeProposal,
   STOCKS,
   type Proposal,
 } from "../bc/daoContract";
@@ -14,9 +16,12 @@ export default function Proposals() {
   const [loading, setLoading] = useState<boolean>(true);
   const [creating, setCreating] = useState<boolean>(false);
   const [votingProposal, setVotingProposal] = useState<number | null>(null);
+  const [executingProposal, setExecutingProposal] = useState<number | null>(
+    null,
+  ); // <-- Added tracking state
   const [newToBuy, setNewToBuy] = useState<number>(0);
   const [newBuyAmount, setNewBuyAmount] = useState<string>("");
-  const [newToSell, setNewToSell] = useState<number>(3); // 3 = none
+  const [newToSell, setNewToSell] = useState<number>(255); // 255 = none
   const [newSellAmount, setNewSellAmount] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -40,7 +45,7 @@ export default function Proposals() {
     void loadProposals();
   }, []);
 
-  const handleCreateProposal = async (
+  const handleCreateBuyProposal = async (
     event: SyntheticEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
@@ -52,17 +57,45 @@ export default function Proposals() {
       if (!newBuyAmount || Number(newBuyAmount) <= 0) {
         throw new Error("Buy amount must be greater than 0");
       }
-      if (newToSell < 3 && (!newSellAmount || Number(newSellAmount) <= 0)) {
-        throw new Error("Sell amount must be greater than 0 if selling");
-      }
 
-      const sellAmount = newToSell < 3 ? newSellAmount : "0";
-      await createProposal(newToBuy, newBuyAmount, newToSell, sellAmount);
+      await createBuyProposal(newToBuy, newBuyAmount);
 
       setStatusMessage("Proposal created successfully.");
       setNewBuyAmount("");
       setNewSellAmount("");
-      setNewToSell(3);
+      setNewToSell(255);
+      await loadProposals();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to create proposal",
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCreateSellProposal = async (
+    event: SyntheticEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setStatusMessage("");
+    setErrorMessage("");
+    setCreating(true);
+
+    try {
+      if (newToSell === 255) {
+        throw new Error("Please select a stock to sell");
+      }
+      if (!newSellAmount || Number(newSellAmount) <= 0) {
+        throw new Error("Sell amount must be greater than 0");
+      }
+
+      await createSellProposal(newToSell, newSellAmount);
+
+      setStatusMessage("Proposal created successfully.");
+      setNewBuyAmount("");
+      setNewSellAmount("");
+      setNewToSell(255);
       await loadProposals();
     } catch (error) {
       setErrorMessage(
@@ -91,6 +124,25 @@ export default function Proposals() {
     }
   };
 
+  // New handler function for execution
+  const handleExecute = async (proposalId: number) => {
+    setStatusMessage("");
+    setErrorMessage("");
+    setExecutingProposal(proposalId);
+
+    try {
+      await executeProposal(proposalId);
+      setStatusMessage(`Proposal #${proposalId} executed successfully!`);
+      await loadProposals();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to execute proposal",
+      );
+    } finally {
+      setExecutingProposal(null);
+    }
+  };
+
   const formatTimestamp = (timestamp: bigint) => {
     return new Date(Number(timestamp) * 1000).toLocaleString();
   };
@@ -116,7 +168,7 @@ export default function Proposals() {
         >
           <h2>Create Buy Proposal</h2>
           <form
-            onSubmit={handleCreateProposal}
+            onSubmit={handleCreateBuyProposal}
             style={{ display: "grid", gap: "1rem" }}
           >
             <div>
@@ -201,7 +253,7 @@ export default function Proposals() {
         >
           <h2>Create Sell Proposal</h2>
           <form
-            onSubmit={handleCreateProposal}
+            onSubmit={handleCreateSellProposal}
             style={{ display: "grid", gap: "1rem" }}
           >
             <div>
@@ -224,7 +276,7 @@ export default function Proposals() {
                   width: "100%",
                 }}
               >
-                <option value={3}>None</option>
+                <option value={255}>None</option>
                 {STOCKS.map((stock) => (
                   <option key={stock.value} value={stock.value}>
                     {stock.label}
@@ -249,23 +301,24 @@ export default function Proposals() {
                 onChange={(e) => setNewSellAmount(e.target.value)}
                 step="0.01"
                 min="0"
-                disabled={newToSell >= 3}
+                disabled={newToSell === 255}
                 style={{
                   padding: "0.5rem",
                   borderRadius: "5px",
                   border: "1px solid #ddd",
                   width: "100%",
-                  opacity: newToSell >= 3 ? 0.5 : 1,
+                  opacity: newToSell === 255 ? 0.5 : 1,
                 }}
               />
             </div>
 
             <button
               type="submit"
-              disabled={creating || newToSell >= 3}
+              disabled={creating || newToSell === 255}
               style={{
                 padding: "0.75rem 1rem",
-                cursor: creating || newToSell >= 3 ? "not-allowed" : "pointer",
+                cursor:
+                  creating || newToSell === 255 ? "not-allowed" : "pointer",
                 border: "solid #d63333 2px",
                 borderRadius: "5px",
                 background: "#d63333",
@@ -280,26 +333,23 @@ export default function Proposals() {
       </div>
 
       <div style={{ minHeight: "2rem", marginBottom: "1rem" }}>
-        {statusMessage ? (
+        {statusMessage && (
           <p style={{ color: "green", margin: 0, fontWeight: "bold" }}>
             {statusMessage}
           </p>
-        ) : null}
-        {errorMessage ? (
+        )}
+        {errorMessage && (
           <p style={{ color: "red", margin: 0, fontWeight: "bold" }}>
             {errorMessage}
           </p>
-        ) : null}
+        )}
       </div>
 
-      {/* Proposals List - Split into Buy and Sell Sections */}
+      {/* Proposals List */}
       {loading ? (
         <p style={{ color: "#666" }}>Loading proposals...</p>
       ) : proposals.length === 0 ? (
-        <p style={{ color: "#666" }}>
-          No active proposals yet. Create one or deposit ETH to gain voting
-          power!
-        </p>
+        <p style={{ color: "#666" }}>No proposals found.</p>
       ) : (
         <div style={{ display: "flex", gap: "2rem", marginBottom: "2rem" }}>
           {/* Buy Proposals Section */}
@@ -319,9 +369,16 @@ export default function Proposals() {
             </h3>
             <div style={{ display: "grid", gap: "1rem" }}>
               {proposals
-                .filter((p) => p.toSell >= 3 || p.sellLabel === null)
+                .filter((p) => p.toSell === 255 || p.sellLabel === null)
                 .map((proposal) => {
                   const ended = Number(proposal.endTime) <= nowSeconds;
+                  const passed =
+                    ended &&
+                    Number(proposal.yesVotes) > Number(proposal.noVotes);
+                  const failed =
+                    ended &&
+                    Number(proposal.yesVotes) <= Number(proposal.noVotes);
+
                   return (
                     <div
                       key={proposal.id}
@@ -342,16 +399,28 @@ export default function Proposals() {
                         }}
                       >
                         <strong>Proposal #{proposal.id}</strong>
-                        <span>
+                        <span
+                          style={{
+                            fontWeight: "bold",
+                            color: proposal.executed
+                              ? "green"
+                              : passed
+                                ? "#0b66ff"
+                                : failed
+                                  ? "red"
+                                  : "#f59e0b",
+                          }}
+                        >
                           {proposal.executed
                             ? "✓ Executed"
-                            : ended
-                              ? "Ended"
-                              : "Active"}
+                            : passed
+                              ? "Passed (Pending)"
+                              : failed
+                                ? "✗ Failed"
+                                : "Active"}
                         </span>
                       </div>
 
-                      {/* Proposal Details */}
                       <div
                         style={{
                           background: "#fff",
@@ -362,15 +431,23 @@ export default function Proposals() {
                         }}
                       >
                         <div style={{ fontSize: "0.95rem" }}>
-                          <div style={{ color: "#666", fontSize: "0.85rem" }}>
-                            BUY
-                          </div>
-                          <div style={{ fontWeight: "bold" }}>
-                            {proposal.label}
-                          </div>
-                          <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                            {proposal.buyAmount} ETH
-                          </div>
+                          {proposal.label && (
+                            <>
+                              <div
+                                style={{ color: "#666", fontSize: "0.85rem" }}
+                              >
+                                BUY
+                              </div>
+                              <div style={{ fontWeight: "bold" }}>
+                                {proposal.label}
+                              </div>
+                              <div
+                                style={{ color: "#888", fontSize: "0.85rem" }}
+                              >
+                                {proposal.buyAmount} ETH
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -398,7 +475,7 @@ export default function Proposals() {
                           <div
                             style={{ fontWeight: "bold", fontSize: "1.2rem" }}
                           >
-                            {proposal.yesVotes}
+                            {proposal.yesVotes.toString()}
                           </div>
                         </div>
                         <div
@@ -416,12 +493,11 @@ export default function Proposals() {
                           <div
                             style={{ fontWeight: "bold", fontSize: "1.2rem" }}
                           >
-                            {proposal.noVotes}
+                            {proposal.noVotes.toString()}
                           </div>
                         </div>
                       </div>
 
-                      {/* Timing */}
                       <div
                         style={{
                           color: "#777",
@@ -434,46 +510,64 @@ export default function Proposals() {
                         Ends: {formatTimestamp(proposal.endTime)}
                       </div>
 
-                      {/* Vote Buttons */}
+                      {/* Dynamic Action Buttons */}
                       <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button
-                          disabled={ended || votingProposal === proposal.id}
-                          onClick={() => void handleVote(proposal.id, 1)}
-                          style={{
-                            padding: "0.5rem 0.75rem",
-                            border: "1px solid #0b66ff",
-                            borderRadius: "5px",
-                            background: "#eef4ff",
-                            cursor: ended ? "not-allowed" : "pointer",
-                            opacity: ended ? 0.5 : 1,
-                          }}
-                        >
-                          Vote Yes
-                        </button>
-                        <button
-                          disabled={ended || votingProposal === proposal.id}
-                          onClick={() => void handleVote(proposal.id, 2)}
-                          style={{
-                            padding: "0.5rem 0.75rem",
-                            border: "1px solid #d63333",
-                            borderRadius: "5px",
-                            background: "#fff0f0",
-                            cursor: ended ? "not-allowed" : "pointer",
-                            opacity: ended ? 0.5 : 1,
-                          }}
-                        >
-                          Vote No
-                        </button>
+                        {!ended ? (
+                          <>
+                            <button
+                              disabled={votingProposal === proposal.id}
+                              onClick={() => void handleVote(proposal.id, 1)}
+                              style={{
+                                padding: "0.5rem 0.75rem",
+                                border: "1px solid #0b66ff",
+                                borderRadius: "5px",
+                                background: "#eef4ff",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Vote Yes
+                            </button>
+                            <button
+                              disabled={votingProposal === proposal.id}
+                              onClick={() => void handleVote(proposal.id, 2)}
+                              style={{
+                                padding: "0.5rem 0.75rem",
+                                border: "1px solid #d63333",
+                                borderRadius: "5px",
+                                background: "#fff0f0",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Vote No
+                            </button>
+                          </>
+                        ) : passed && !proposal.executed ? (
+                          <button
+                            disabled={executingProposal === proposal.id}
+                            onClick={() => void handleExecute(proposal.id)}
+                            style={{
+                              padding: "0.6rem 1rem",
+                              width: "100%",
+                              border: "1px solid green",
+                              borderRadius: "5px",
+                              background: "#e6f4ea",
+                              color: "green",
+                              fontWeight: "bold",
+                              cursor:
+                                executingProposal === proposal.id
+                                  ? "not-allowed"
+                                  : "pointer",
+                            }}
+                          >
+                            {executingProposal === proposal.id
+                              ? "Executing..."
+                              : "⚙ Execute Proposal"}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );
                 })}
-              {proposals.filter((p) => p.toSell >= 3 || p.sellLabel === null)
-                .length === 0 && (
-                <p style={{ color: "#999", fontSize: "0.9rem" }}>
-                  No buy proposals yet
-                </p>
-              )}
             </div>
           </section>
 
@@ -497,6 +591,13 @@ export default function Proposals() {
                 .filter((p) => p.toSell < 3 && p.sellLabel !== null)
                 .map((proposal) => {
                   const ended = Number(proposal.endTime) <= nowSeconds;
+                  const passed =
+                    ended &&
+                    Number(proposal.yesVotes) > Number(proposal.noVotes);
+                  const failed =
+                    ended &&
+                    Number(proposal.yesVotes) <= Number(proposal.noVotes);
+
                   return (
                     <div
                       key={proposal.id}
@@ -517,16 +618,28 @@ export default function Proposals() {
                         }}
                       >
                         <strong>Proposal #{proposal.id}</strong>
-                        <span>
+                        <span
+                          style={{
+                            fontWeight: "bold",
+                            color: proposal.executed
+                              ? "green"
+                              : passed
+                                ? "#0b66ff"
+                                : failed
+                                  ? "red"
+                                  : "#f59e0b",
+                          }}
+                        >
                           {proposal.executed
                             ? "✓ Executed"
-                            : ended
-                              ? "Ended"
-                              : "Active"}
+                            : passed
+                              ? "Passed (Pending)"
+                              : failed
+                                ? "✗ Failed"
+                                : "Active"}
                         </span>
                       </div>
 
-                      {/* Proposal Details */}
                       <div
                         style={{
                           background: "#fff",
@@ -537,28 +650,40 @@ export default function Proposals() {
                         }}
                       >
                         <div style={{ display: "grid", gap: "0.75rem" }}>
-                          <div>
-                            <div style={{ color: "#666", fontSize: "0.85rem" }}>
-                              BUY
+                          {proposal.label && (
+                            <div>
+                              <div
+                                style={{ color: "#666", fontSize: "0.85rem" }}
+                              >
+                                BUY
+                              </div>
+                              <div style={{ fontWeight: "bold" }}>
+                                {proposal.label}
+                              </div>
+                              <div
+                                style={{ color: "#888", fontSize: "0.85rem" }}
+                              >
+                                {proposal.buyAmount} ETH
+                              </div>
                             </div>
-                            <div style={{ fontWeight: "bold" }}>
-                              {proposal.label}
+                          )}
+                          {proposal.sellLabel && (
+                            <div>
+                              <div
+                                style={{ color: "#666", fontSize: "0.85rem" }}
+                              >
+                                SELL
+                              </div>
+                              <div style={{ fontWeight: "bold" }}>
+                                {proposal.sellLabel}
+                              </div>
+                              <div
+                                style={{ color: "#888", fontSize: "0.85rem" }}
+                              >
+                                {proposal.sellAmount} units
+                              </div>
                             </div>
-                            <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                              {proposal.buyAmount} ETH
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ color: "#666", fontSize: "0.85rem" }}>
-                              SELL
-                            </div>
-                            <div style={{ fontWeight: "bold" }}>
-                              {proposal.sellLabel}
-                            </div>
-                            <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                              {proposal.sellAmount} units
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
 
@@ -586,7 +711,7 @@ export default function Proposals() {
                           <div
                             style={{ fontWeight: "bold", fontSize: "1.2rem" }}
                           >
-                            {proposal.yesVotes}
+                            {proposal.yesVotes.toString()}
                           </div>
                         </div>
                         <div
@@ -604,12 +729,11 @@ export default function Proposals() {
                           <div
                             style={{ fontWeight: "bold", fontSize: "1.2rem" }}
                           >
-                            {proposal.noVotes}
+                            {proposal.noVotes.toString()}
                           </div>
                         </div>
                       </div>
 
-                      {/* Timing */}
                       <div
                         style={{
                           color: "#777",
@@ -622,46 +746,64 @@ export default function Proposals() {
                         Ends: {formatTimestamp(proposal.endTime)}
                       </div>
 
-                      {/* Vote Buttons */}
+                      {/* Dynamic Action Buttons */}
                       <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button
-                          disabled={ended || votingProposal === proposal.id}
-                          onClick={() => void handleVote(proposal.id, 1)}
-                          style={{
-                            padding: "0.5rem 0.75rem",
-                            border: "1px solid #0b66ff",
-                            borderRadius: "5px",
-                            background: "#eef4ff",
-                            cursor: ended ? "not-allowed" : "pointer",
-                            opacity: ended ? 0.5 : 1,
-                          }}
-                        >
-                          Vote Yes
-                        </button>
-                        <button
-                          disabled={ended || votingProposal === proposal.id}
-                          onClick={() => void handleVote(proposal.id, 2)}
-                          style={{
-                            padding: "0.5rem 0.75rem",
-                            border: "1px solid #d63333",
-                            borderRadius: "5px",
-                            background: "#fff0f0",
-                            cursor: ended ? "not-allowed" : "pointer",
-                            opacity: ended ? 0.5 : 1,
-                          }}
-                        >
-                          Vote No
-                        </button>
+                        {!ended ? (
+                          <>
+                            <button
+                              disabled={votingProposal === proposal.id}
+                              onClick={() => void handleVote(proposal.id, 1)}
+                              style={{
+                                padding: "0.5rem 0.75rem",
+                                border: "1px solid #0b66ff",
+                                borderRadius: "5px",
+                                background: "#eef4ff",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Vote Yes
+                            </button>
+                            <button
+                              disabled={votingProposal === proposal.id}
+                              onClick={() => void handleVote(proposal.id, 2)}
+                              style={{
+                                padding: "0.5rem 0.75rem",
+                                border: "1px solid #d63333",
+                                borderRadius: "5px",
+                                background: "#fff0f0",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Vote No
+                            </button>
+                          </>
+                        ) : passed && !proposal.executed ? (
+                          <button
+                            disabled={executingProposal === proposal.id}
+                            onClick={() => void handleExecute(proposal.id)}
+                            style={{
+                              padding: "0.6rem 1rem",
+                              width: "100%",
+                              border: "1px solid green",
+                              borderRadius: "5px",
+                              background: "#e6f4ea",
+                              color: "green",
+                              fontWeight: "bold",
+                              cursor:
+                                executingProposal === proposal.id
+                                  ? "not-allowed"
+                                  : "pointer",
+                            }}
+                          >
+                            {executingProposal === proposal.id
+                              ? "Executing..."
+                              : "⚙ Execute Proposal"}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );
                 })}
-              {proposals.filter((p) => p.toSell < 3 && p.sellLabel !== null)
-                .length === 0 && (
-                <p style={{ color: "#999", fontSize: "0.9rem" }}>
-                  No sell proposals yet
-                </p>
-              )}
             </div>
           </section>
         </div>
