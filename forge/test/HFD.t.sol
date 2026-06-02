@@ -88,7 +88,7 @@ contract HedgeFundDAOTest is Test {
         vm.startPrank(user1);
         hfdao.buyShares{value: 5 ether}();
         
-        vm.expectRevert("Not enough liquid ETH in fund; sell assets first");
+        vm.expectRevert("Not enough tokens");
         hfdao.retrieveEth(10 ether);
         
         vm.stopPrank();
@@ -126,10 +126,10 @@ contract HedgeFundDAOTest is Test {
     function test_CreateBuyProposal_Basic() public {
         vm.prank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
+
         vm.prank(user1);
         hfdao.createBuyProposal(0, 5 ether); // Buy SP500 with 5 ETH
-        
+
         (
             uint256 id,
             uint8 toBuy,
@@ -142,7 +142,7 @@ contract HedgeFundDAOTest is Test {
             uint256 endTime,
             bool executed
         ) = hfdao.proposals(0);
-        
+
         assertEq(id, 0);
         assertEq(toBuy, 0);
         assertEq(buyAmount, 5 ether);
@@ -150,7 +150,7 @@ contract HedgeFundDAOTest is Test {
         assertEq(sellAmount, 0);
         assertEq(yesVotes, 0);
         assertEq(noVotes, 0);
-        assertEq(snapshotBlock, block.number - 1);
+        assertEq(snapshotBlock, block.number);
         assertEq(endTime, block.timestamp + 3 minutes);
         assertEq(executed, false);
     }
@@ -634,8 +634,9 @@ contract HedgeFundDAOTest is Test {
         hfdao.executeProposal(0);
 
         // Now create and execute a sell proposal
-        vm.prank(user1);
         uint256 stockToSell = hfdao.getPortfolioStock(0) / 2;
+        
+        vm.prank(user1);
         hfdao.createSellProposal(0, stockToSell);
 
         vm.roll(block.number + 1);

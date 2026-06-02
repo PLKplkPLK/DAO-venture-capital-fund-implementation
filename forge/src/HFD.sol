@@ -5,6 +5,12 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
+enum Stock {
+    SP500,     // 0 - S&P 500
+    Wheat,     // 1 - Wheat
+    Apple      // 2 - Apple
+}
+
 interface IPriceOracle {
     function getPrice(uint8 stock) external view returns (uint256);
 }
@@ -59,7 +65,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             tokensToMint = msg.value;
         } else {
             // Price tokens proportional to the current net value of the fund
-            tokensToMint = (msg.value * supply) / (totalValue - msg.value);
+            tokensToMint = (msg.value * supply) / totalValue;
         }
 
         cashBalance += msg.value;
@@ -87,7 +93,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     }
 
     function setPriceOracle(address _oracle) external onlyOwner {
-        require(_oracle != address(0), "Invalid address");
+        require(_oracle != address(0), "Invalid oracle address");
         priceOracle = IPriceOracle(_oracle);
         emit PriceOracleUpdated(_oracle);
     }
@@ -108,7 +114,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             sellAmount: 0,
             yesVotes: 0,
             noVotes: 0,
-            snapshotBlock: block.number - 1,
+            snapshotBlock: block.number,
             endTime: block.timestamp + 3 minutes,
             executed: false
         });
@@ -134,7 +140,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             sellAmount: sellAmount,
             yesVotes: 0,
             noVotes: 0,
-            snapshotBlock: block.number - 1,
+            snapshotBlock: block.number,
             endTime: block.timestamp + 3 minutes,
             executed: false
         });

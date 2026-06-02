@@ -24,8 +24,13 @@ cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "setPriceOracle(address)" 0
 wsl and forge one-liner:
 `wsl -e sh -lc "cd /mnt/d/Pobrane/DAO-venture-capital-fund-implementation/forge && /home/pelek/.foundry/bin/forge test"`
 
-#### Local ETH node - Foundry - Anvil
+## Local ETH node - Foundry - Anvil
 
 Use wsl on Windows.
 
 `anvil`
+
+# TODO
+
+- broker
+- real oracle
