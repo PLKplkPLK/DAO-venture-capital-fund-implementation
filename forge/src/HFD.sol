@@ -45,6 +45,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
     IPriceOracle public priceOracle;
     address public owner; 
+    address public brokerContract;
 
     // ========== Events ==========
 
@@ -75,10 +76,21 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         _;
     }
 
+    modifier onlyBrokerContract() {
+        require(msg.sender == brokerContract, "Caller is not the Broker Contract");
+        _;
+    }
+
     // ========== Constructor ==========
 
     constructor() ERC20("HF Token", "HF") ERC20Permit("HF Token") {
         owner = msg.sender;
+    }
+    
+    // ========== Setters ==========
+
+    function setBroker(address _brokerContract) external onlyOwner {
+        brokerContract = _brokerContract;
     }
 
     // ========== Fund Management ==========
@@ -156,7 +168,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             yesVotes: 0,
             noVotes: 0,
             snapshotBlock: block.number,
-            endTime: block.timestamp + 3 minutes,
+            endTime: block.timestamp + 1 minutes,
             executed: false
         });
 
@@ -218,43 +230,30 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         emit Voted(proposalId, msg.sender, choice, weight);
     }
 
-    /// @notice Execute an approved proposal
-    /// @dev Sells are processed before buys to ensure liquidity availability
-    /// @param proposalId ID of the proposal to execute
-    function executeProposal(uint256 proposalId) external {
+    /// @notice This function is called by the Broker contract to update the DAO's portfolio state.
+    function finalizeTradeFromBroker(
+        uint256 proposalId, 
+        uint256 ethSpent, 
+        uint256 ethGained, 
+        uint8 stock, 
+        uint256 stockAmount, 
+        bool isBuy
+    ) external onlyBrokerContract {
         Proposal storage proposal = proposals[proposalId];
-        require(proposalId < nextProposalId, "Proposal missing");
-        require(!proposal.executed, "Already executed");
-        require(block.timestamp >= proposal.endTime, "Voting active");
-        require(proposal.yesVotes > proposal.noVotes, "Proposal failed");
-        require(address(priceOracle) != address(0), "Oracle not configured");
 
-        uint256 ethGained = 0;
-        uint256 ethSpent = 0;
+        if (isBuy) {
+            require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
+            cashBalance -= ethSpent;
+            portfolio[stock] += stockAmount;
 
-        // Process Sells First (to release cash pool liquidity)
-        if (proposal.toSell < 3) {
-            uint256 sellPrice = priceOracle.getPrice(proposal.toSell);
-            ethGained = (proposal.sellAmount * sellPrice) / 1e18;
-
-            portfolio[proposal.toSell] -= proposal.sellAmount;
+            proposal.executed = true;
+            
+            (bool success, ) = payable(msg.sender).call{value: ethSpent}("");
+            require(success, "ETH transfer to Broker failed");
+        } else {
+            portfolio[stock] -= stockAmount; // Zakładamy uproszczenie dla sprzedaży
             cashBalance += ethGained;
         }
-
-        // Process Buys (using released liquidity + existing cash)
-        if (proposal.toBuy < 3) {
-            ethSpent = proposal.buyAmount;
-            require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
-
-            uint256 buyPrice = priceOracle.getPrice(proposal.toBuy);
-            uint256 stockGained = (ethSpent * 1e18) / buyPrice;
-
-            cashBalance -= ethSpent;
-            portfolio[proposal.toBuy] += stockGained;
-        }
-
-        proposal.executed = true;
-        emit ProposalExecuted(proposalId, ethSpent, ethGained);
     }
 
     // ========== View Functions ==========

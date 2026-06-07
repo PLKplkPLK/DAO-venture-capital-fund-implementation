@@ -333,6 +333,24 @@ export async function getPortfolioStock(stock: number): Promise<string> {
   }
 }
 
+export async function getPriceForStock(stock: number): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  const daoContract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+
+  try {
+    const oracleAddress: string = await daoContract.priceOracle();
+    if (!oracleAddress || oracleAddress === ethers.ZeroAddress) return "0";
+
+    const oracleAbi = ["function getPrice(uint8) view returns (uint256)"];
+    const oracle = new ethers.Contract(oracleAddress, oracleAbi, browserProvider);
+    const price = await oracle.getPrice(stock);
+    return ethers.formatEther(price);
+  } catch (error) {
+    console.error("Error fetching oracle price:", error);
+    return "0";
+  }
+}
+
 export async function getAllPortfolioStocks(): Promise<Record<string, string>> {
   const holdings: Record<string, string> = {};
   for (let i = 0; i < 3; i++) {

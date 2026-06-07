@@ -1,10 +1,28 @@
 import { ethers } from "ethers";
 
-export { getProvider, getBrowserProvider, getContractABI, getContractAddress };
+export { 
+  getProvider, 
+  getBrowserProvider, 
+  getContractABI, 
+  getContractAddress,
+  getBrokerContractAddress, 
+  getBrokerContractABI,
+  getNFTContractAddress,
+  getNFTContractABI 
+};
 
 const DAO_CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_DAO_CONTRACT_ADDRESS ??
   "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+const BROKER_CONTRACT_ADDRESS =
+  process.env.NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS ??
+  "0x71C95911E9a5D330f4D621842EC243EE1343292e";
+
+const NFT_CONTRACT_ADDRESS =
+  process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS ??
+  "0x8464135c8F25Da09e49BC8782676a84730C318bC";
+
 const DAO_CONTRACT_ABI = [
   "function buyShares() payable",
   "function retrieveEth(uint256 amount)",
@@ -16,12 +34,25 @@ const DAO_CONTRACT_ABI = [
   "function executeProposal(uint256 proposalId)",
   "function vote(uint256 proposalId, uint8 choice)",
   "function getFundTotalValue() view returns (uint256)",
+  "function priceOracle() view returns (address)",
   "function getPortfolioValue() view returns (uint256)",
   "function getPortfolioStock(uint8 stock) view returns (uint256)",
   "function portfolio(uint8) view returns (uint256)",
   "event Transfer(address indexed from, address indexed to, uint256 value)",
   "function delegate(address delegatee)",
   "function delegates(address account) view returns (address)",
+];
+
+const NFT_CONTRACT_ABI = [
+  "function getTransaction(uint256 tokenId) view returns (uint256 proposalId, uint8 stock, uint8 transactionType, uint256 amount, uint256 price, address broker, uint256 timestamp)"
+  ,"function getBrokerTransactions(address) view returns (uint256[])"
+  ,"function nextTransactionId() view returns (uint256)"
+];
+
+const BROKER_CONTRACT_ABI = [
+  "function brokerAddress() view returns (address)",
+  "function executeOrder(uint256 proposalId, uint8 stock, bool isBuy, uint256 amount) external returns (uint256)",
+  "function audits(uint256 nftTokenId) view returns (uint256 nftTokenId, uint256 goodVotes, uint256 badVotes, bool auditClosed, bool isPerformanceApproved)"
 ];
 
 function getProvider() {
@@ -54,4 +85,19 @@ function getContractABI() {
 
 function getContractAddress() {
   return DAO_CONTRACT_ADDRESS;
+}
+
+function getBrokerContractAddress() {
+  return BROKER_CONTRACT_ADDRESS; 
+}
+function getBrokerContractABI() {
+  return BROKER_CONTRACT_ABI; 
+}
+
+function getNFTContractAddress() {
+  return NFT_CONTRACT_ADDRESS; 
+}
+
+function getNFTContractABI() {
+  return NFT_CONTRACT_ABI; 
 }
