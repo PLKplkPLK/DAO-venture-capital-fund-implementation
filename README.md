@@ -32,6 +32,7 @@ forge create src/broker.sol:InvestmentBroker --rpc-url http://127.0.0.1:8545 --p
 cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "setBroker(address)" 0x71C95911E9a5D330f4D621842EC243EE1343292e --rpc-url http://127.0.0.1:8545 --private-key "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 cast send 0x8464135c8F25Da09e49BC8782676a84730C318bC "setBroker(address)" 0x71C95911E9a5D330f4D621842EC243EE1343292e --rpc-url http://127.0.0.1:8545 --private-key "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 cast send 0x8464135c8F25Da09e49BC8782676a84730C318bC "setDAO(address)" 0x5FbDB2315678afecb367f032d93F642f64180aa3 --rpc-url http://127.0.0.1:8545 --private-key "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "setNFTContract(address)" 0x8464135c8F25Da09e49BC8782676a84730C318bC --rpc-url http://127.0.0.1:8545 --private-key "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 ```
 
 wsl and forge one-liner:

@@ -14,6 +14,7 @@ interface IHedgeFundDAO {
     function brokerDepositOf(address broker) external view returns (uint256);
     function requiredBrokerDeposit() external view returns (uint256);
     function cashBalance() external view returns (uint256);
+    function initializeAudit(uint256 nftTokenId, uint256 proposalId) external;
 }
 
 /// @dev Interface for price oracle to return per-stock prices.
@@ -134,10 +135,12 @@ contract InvestmentBroker {
             msg.sender
         );
 
+        dao.initializeAudit(tokenId, proposalId);
+
         if (isBuy) {
             dao.executeProposal(proposalId, ethSpent, 0, stock, stockAmountTransacted, true);
         } else {
-            dao.executeProposal{value: ethGained}(proposalId, 0, ethGained, stock, stockAmountTransacted, false);
+            dao.executeProposal(proposalId, 0, ethGained, stock, stockAmountTransacted, false);
         }
 
         emit OrderExecuted(proposalId, tokenId, currentMarketPrice);

@@ -46,6 +46,14 @@ const DAO_CONTRACT_ABI = [
   "event ProposalExecuted(uint256 indexed proposalId, uint256 ethSpent, uint256 ethGained)",
   "function delegate(address delegatee)",
   "function delegates(address account) view returns (address)",
+  "function audits(uint256 nftTokenId) view returns (uint256 nftTokenId, uint256 proposalId, uint256 approveVotes, uint256 slashVotes, uint256 auditEndTime, bool auditClosed, bool brokerSlashed)",
+  "function hasVotedInAudit(uint256 nftTokenId, address voter) view returns (bool)",
+  "function userVotes(uint256 proposalId, address voter) view returns (uint8)",
+  "function initializeAudit(uint256 nftTokenId, uint256 proposalId)",
+  "function voteOnAudit(uint256 nftTokenId, uint8 choice)",
+  "function finalizeAudit(uint256 nftTokenId)",
+  "event AuditVoteSubmitted(uint256 indexed nftTokenId, address indexed voter, uint8 choice, uint256 weight)",
+  "event AuditFinalized(uint256 indexed nftTokenId, bool slashed, uint256 amountSlashed)"
 ];
 
 const NFT_CONTRACT_ABI = [
@@ -55,7 +63,9 @@ const NFT_CONTRACT_ABI = [
   "function ownerOf(uint256) view returns (address)",
   "function balanceOf(address owner) view returns (uint256)",
   "function mintTransaction(uint256 proposalId, uint8 stock, bool isBuy, uint256 stockAmount, uint256 price, address broker) returns (uint256)",
-  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+  "function getTransactionBroker(uint256 tokenId) view returns (address)",
+  "function getTransaction(uint256 tokenId) view returns (uint256 proposalId, uint8 stock, uint8 transactionType, uint256 amount, uint256 price, address broker, uint256 timestamp)"
 ];
 
 const BROKER_CONTRACT_ABI = [

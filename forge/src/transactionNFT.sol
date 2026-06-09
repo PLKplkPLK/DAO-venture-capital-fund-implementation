@@ -125,6 +125,13 @@ contract TransactionNFT is ERC721 {
         return transactions[tokenId];
     }
 
+    /// @notice Returns the broker address that initiated a given transaction NFT.
+    /// @param tokenId The transaction NFT id
+    function getTransactionBroker(uint256 tokenId) external view returns (address) {
+        require(tokenId < nextTransactionId, "Nonexistent token");
+        return transactions[tokenId].broker;
+    }
+
     /// @notice Returns list of tokenIds minted that were initiated by a broker address
     function getBrokerTransactions(address broker) external view returns (uint256[] memory) {
         return brokerTransactions[broker];
