@@ -36,23 +36,11 @@ export async function brokerExecuteOrder(
   proposalId: number,
   stock: number,
   isBuy: boolean,
-  amountStr: string
 ): Promise<string> {
   const browserProvider = await getBrowserProvider();
   const signer = await browserProvider.getSigner();
   const brokerContract = await getBrokerContract(signer);
-
-  const amount = isBuy
-    ? ethers.parseEther(amountStr)      // ETH -> wei
-    : ethers.parseUnits(amountStr, 18); // asset units with 18 decimals
-
-  const tx = await brokerContract.executeOrder(
-    proposalId,
-    stock,
-    isBuy,
-    amount,
-    { gasLimit: 500000 }
-  );
+  const tx = await brokerContract.executeOrder(proposalId, stock, isBuy);
 
   await tx.wait();
   return `Order for Proposal #${proposalId} executed successfully by Broker. NFT Minted!`;

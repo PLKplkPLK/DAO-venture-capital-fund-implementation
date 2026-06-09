@@ -46,6 +46,9 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     IPriceOracle public priceOracle;
     address public owner; 
     address public brokerContract;
+    // Broker deposit tracking — brokers must post a deposit before executing proposals
+    mapping(address => uint256) public brokerDeposits;
+    uint256 public immutable requiredBrokerDeposit = 100 ether;
 
     // ========== Events ==========
 
@@ -91,6 +94,32 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
     function setBroker(address _brokerContract) external onlyOwner {
         brokerContract = _brokerContract;
+    }
+
+    /// @notice Broker can deposit ETH to be eligible to execute proposals
+    function depositBroker() external payable {
+        require(msg.value > 0, "Deposit must be > 0");
+        brokerDeposits[msg.sender] += msg.value;
+    }
+
+    /// @notice Broker may withdraw their deposit (if not slashed)
+    function withdrawBrokerDeposit(uint256 amount) external {
+        require(brokerDeposits[msg.sender] >= amount, "Not enough deposit");
+        brokerDeposits[msg.sender] -= amount;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "ETH transfer failed");
+    }
+
+    /// @notice View broker deposit for address
+    function brokerDepositOf(address broker) external view returns (uint256) {
+        return brokerDeposits[broker];
+    }
+
+    /// @notice Slash a broker's deposit (collect into DAO cashBalance). Restricted to owner for now.
+    function slashBrokerDeposit(address broker, uint256 amount) external onlyOwner {
+        require(brokerDeposits[broker] >= amount, "Not enough deposit to slash");
+        brokerDeposits[broker] -= amount;
+        cashBalance += amount;
     }
 
     // ========== Fund Management ==========
@@ -231,16 +260,16 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     }
 
     /// @notice This function is called by the Broker contract to update the DAO's portfolio state.
-    function finalizeTradeFromBroker(
+    function executeProposal(
         uint256 proposalId, 
         uint256 ethSpent, 
         uint256 ethGained, 
         uint8 stock, 
         uint256 stockAmount, 
         bool isBuy
-    ) external onlyBrokerContract {
+    ) external payable onlyBrokerContract {
         Proposal storage proposal = proposals[proposalId];
-
+        require(!proposal.executed, "Proposal already executed");
         if (isBuy) {
             require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
             cashBalance -= ethSpent;
@@ -251,9 +280,16 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             (bool success, ) = payable(msg.sender).call{value: ethSpent}("");
             require(success, "ETH transfer to Broker failed");
         } else {
-            portfolio[stock] -= stockAmount; // Zakładamy uproszczenie dla sprzedaży
+            require(msg.value == ethGained, "Sent ETH does not match ethGained");
+            require(portfolio[stock] >= stockAmount, "Not enough stock in portfolio to sell");
+            
+            portfolio[stock] -= stockAmount;
             cashBalance += ethGained;
+            
+            proposal.executed = true;
         }
+
+        emit ProposalExecuted(proposalId, ethSpent, ethGained);
     }
 
     // ========== View Functions ==========

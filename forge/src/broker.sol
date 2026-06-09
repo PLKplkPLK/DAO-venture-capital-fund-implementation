@@ -7,9 +7,13 @@ interface IHedgeFundDAO {
         uint256 id, uint8 toBuy, uint256 buyAmount, uint8 toSell, uint256 sellAmount,
         uint256 yesVotes, uint256 noVotes, uint256 snapshotBlock, uint256 endTime, bool executed
     );
-    function finalizeTradeFromBroker(
+    function executeProposal(
         uint256 proposalId, uint256 ethSpent, uint256 ethGained, uint8 stock, uint256 stockAmount, bool isBuy
-    ) external;
+    ) external payable;
+    // Broker deposit helpers
+    function brokerDepositOf(address broker) external view returns (uint256);
+    function requiredBrokerDeposit() external view returns (uint256);
+    function cashBalance() external view returns (uint256);
 }
 
 /// @dev Interface for price oracle to return per-stock prices.
@@ -38,9 +42,7 @@ contract InvestmentBroker {
 
     // ========== Events ==========
 
-    /// @dev Emitted when the broker executes an order and mints a transaction NFT.
     event OrderExecuted(uint256 indexed proposalId, uint256 nftTokenId, uint256 price);
-
 
     // ========== Modifiers ==========
     
@@ -92,11 +94,13 @@ contract InvestmentBroker {
         uint8 stock,
         bool isBuy
     ) external onlyBroker returns (uint256) {
+        // Ensure broker has posted required deposit in DAO
+        require(dao.brokerDepositOf(msg.sender) >= dao.requiredBrokerDeposit(), "Broker deposit insufficient");
         
         // 1. Retrieve proposal and verify it's eligible for execution
         (, , uint256 buyAmount, , uint256 sellAmount, uint256 yesVotes, uint256 noVotes, , uint256 endTime, bool executed) = dao.proposals(proposalId);
         
-        require(!executed, "Order already filled");
+        require(!executed, "Order already executed for this proposal");
         require(block.timestamp >= endTime, "Voting is still active in DAO");
         require(yesVotes > noVotes, "Proposal failed voting requirements");
         require(stock < 3, "Invalid stock ID");
@@ -105,50 +109,41 @@ contract InvestmentBroker {
         uint256 currentMarketPrice = priceOracle.getPrice(stock);
         require(currentMarketPrice > 0, "Oracle returned zero price");
 
-        uint256 stockGained = 0;
+        uint256 stockAmountTransacted = 0;
         uint256 ethSpent = 0;
         uint256 ethGained = 0;
 
         if (isBuy) {
             ethSpent = buyAmount;
-            // Calculate how many stock units are bought for ethSpent
-            // stock units are denominated with 18 decimals in this system
-            stockGained = (ethSpent * 1e18) / currentMarketPrice;
+            require(dao.cashBalance() >= ethSpent, "DAO has insufficient cash balance for this buy");
+            stockAmountTransacted = (ethSpent * 1e18) / currentMarketPrice;
         } else {
-            uint256 stockToSell = sellAmount;
-            // Calculate ETH gained by selling stockToSell units
-            ethGained = (stockToSell * currentMarketPrice) / 1e18;
+            stockAmountTransacted = sellAmount;
+            ethGained = (stockAmountTransacted * currentMarketPrice) / 1e18;
         }
 
-        // 3. Notify DAO to update internal accounting and (for buys) transfer ETH to this contract
-        dao.finalizeTradeFromBroker(proposalId, ethSpent, ethGained, stock, isBuy ? stockGained : sellAmount, isBuy);
-
-        // 4. If this was a SELL, the broker contract should forward obtained ETH back to DAO treasury
-        // (DAO.finalizeTradeFromBroker for sells doesn't send ETH to broker, broker may have received ETH off-chain;
-        // but keep the previously used safe pattern: if this contract holds ethGained we forward to DAO)
-        if (!isBuy && ethGained > 0) {
-            (bool success, ) = payable(address(dao)).call{value: ethGained}("");
-            require(success, "Failed to send ethGained back to DAO");
-        }
-
-        // 5. Mint transaction NFT to DAO treasury as on-chain proof
-        uint256 nftAmount = isBuy ? stockGained : sellAmount;
-        require(nftAmount > 0, "Computed NFT amount is zero");
-
+        require(stockAmountTransacted > 0, "Computed NFT amount is zero");
+        
+        // 5. Mint transaction NFT to DAO treasury
         uint256 tokenId = nftContract.mintTransaction(
             proposalId,
             stock,
             isBuy,
-            nftAmount,
+            stockAmountTransacted,
             currentMarketPrice,
             msg.sender
         );
+
+        if (isBuy) {
+            dao.executeProposal(proposalId, ethSpent, 0, stock, stockAmountTransacted, true);
+        } else {
+            dao.executeProposal{value: ethGained}(proposalId, 0, ethGained, stock, stockAmountTransacted, false);
+        }
 
         emit OrderExecuted(proposalId, tokenId, currentMarketPrice);
         return tokenId;
     }
 
-    // Allow contract to receive ETH (DAO may send ETH for buys)
     receive() external payable {}
     fallback() external payable {}
 }

@@ -358,3 +358,50 @@ export async function getAllPortfolioStocks(): Promise<Record<string, string>> {
   }
   return holdings;
 }
+
+export async function depositBroker(amountEth: string) {
+  if (!amountEth || Number(amountEth) <= 0) {
+    throw new Error("Enter a deposit amount greater than 0.");
+  }
+
+  try {
+    const signer = await getSigner();
+    const daoContract = await getDaoContract(signer);
+    const value = ethers.parseEther(amountEth);
+
+    const tx = await daoContract.depositBroker({ value });
+    await tx.wait();
+    return `Broker deposit of ${amountEth} ETH submitted.`;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function getBrokerDeposit(brokerAddress?: string): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  try {
+    let addr = brokerAddress;
+    if (!addr) {
+      addr = await getUserAddress();
+    }
+    const amount = await contract.brokerDepositOf(addr);
+    return ethers.formatEther(amount);
+  } catch (error) {
+    console.error("Error getting broker deposit:", error);
+    return "0";
+  }
+}
+
+export async function getRequiredBrokerDeposit(): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  console.log(getContractABI());
+  const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  try {
+    const amount = await contract.requiredBrokerDeposit();
+    return ethers.formatEther(amount);
+  } catch (error) {
+    console.error("Error getting required broker deposit:", error);
+    return "N/A";
+  }
+}

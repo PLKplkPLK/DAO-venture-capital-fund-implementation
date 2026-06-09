@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
-import { fetchAllProposals, type Proposal, getPriceForStock } from "../bc/daoContract";
+import { fetchAllProposals, type Proposal, getPriceForStock, depositBroker, getBrokerDeposit, getRequiredBrokerDeposit } from "../bc/daoContract";
 import { isCurrentUserBroker, brokerExecuteOrder } from "../bc/brokerContract";
 
 export default function BrokerPage() {
@@ -10,6 +10,12 @@ export default function BrokerPage() {
   const [isBroker, setIsBroker] = useState<boolean | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [executingId, setExecutingId] = useState<number | null>(null);
+  const [depositAmount, setDepositAmount] = useState<string>("");
+  const [depositing, setDepositing] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [currentBrokerDeposit, setCurrentBrokerDeposit] = useState<string>("0");
+  const [requiredBrokerDeposit, setRequiredBrokerDeposit] = useState<string>("0");
   
   // cached oracle prices per stock
   const [oraclePrices, setOraclePrices] = useState<Record<number, string>>({});
@@ -51,6 +57,14 @@ export default function BrokerPage() {
         } catch (err) {
           console.warn("Failed to fetch oracle prices", err);
         }
+          // fetch broker deposit info for connected broker
+          try {
+            const [cur, req] = await Promise.all([getBrokerDeposit(), getRequiredBrokerDeposit()]);
+            setCurrentBrokerDeposit(cur);
+            setRequiredBrokerDeposit(req);
+          } catch (err) {
+            console.warn("Failed to fetch broker deposit info", err);
+          }
       }
     } catch (error) {
       console.error("Failed to load broker data", error);
@@ -75,27 +89,54 @@ export default function BrokerPage() {
   
 
   const handleExecuteOrder = async (proposal: Proposal) => {
+    setStatusMessage("");
+    setErrorMessage("");
+
+    if (
+      requiredBrokerDeposit !== "N/A" &&
+      Number(currentBrokerDeposit) < Number(requiredBrokerDeposit)
+    ) {
+      setErrorMessage(
+        `Broker deposit too low. Required: ${requiredBrokerDeposit} ETH, current: ${currentBrokerDeposit} ETH`,
+      );
+      return;
+    }
+    console.log(proposal.executed);
+
     setExecutingId(proposal.id);
+    await loadBrokerData();
     try {
       const isBuy = proposal.label !== null;
       const assetId = isBuy ? proposal.toBuy : proposal.toSell;
-
-      const amountStr = isBuy
-        ? (typeof proposal.buyAmount === "string" && proposal.buyAmount.includes(".")
-            ? proposal.buyAmount
-            : ethers.formatEther(proposal.buyAmount as any))
-        : (typeof proposal.sellAmount === "string" && proposal.sellAmount.includes(".")
-            ? proposal.sellAmount
-            : ethers.formatUnits(proposal.sellAmount as any, 18));
-
-      const msg = await brokerExecuteOrder(proposal.id, assetId, isBuy, amountStr);
-      alert(msg);
+      const msg = await brokerExecuteOrder(proposal.id, assetId, isBuy);
+      setStatusMessage(msg);
       await loadBrokerData();
     } catch (error) {
       console.error("Execution failed:", error);
-      alert(error instanceof Error ? error.message : "Execution failed");
+      setErrorMessage(error instanceof Error ? error.message : "Execution failed");
     } finally {
       setExecutingId(null);
+    }
+  };
+
+  const handleDeposit = async () => {
+    setStatusMessage("");
+    setErrorMessage("");
+    if (!depositAmount || Number(depositAmount) <= 0) {
+      setErrorMessage("Enter a deposit amount > 0 ETH");
+      return;
+    }
+    setDepositing(true);
+    try {
+      const res = await depositBroker(depositAmount);
+      setStatusMessage(res);
+      setDepositAmount("");
+      await loadBrokerData();
+    } catch (err) {
+      console.error(err);
+      setErrorMessage(err instanceof Error ? err.message : "Deposit failed");
+    } finally {
+      setDepositing(false);
     }
   };
 
@@ -112,12 +153,51 @@ export default function BrokerPage() {
   }
 
   return (
-    <div style={{ maxWidth: "800px", margin: "0 auto", padding: "2rem", fontFamily: "sans-serif" }}>
+    <div style={{ width: "100%", maxWidth: "1000px", margin: "0 auto", padding: "2rem", fontFamily: "sans-serif" }}>
       <header style={{ borderBottom: "1px solid #ccc", paddingBottom: "1rem", marginBottom: "2rem" }}>
         <h1 style={{ margin: "0 0 0.5rem 0" }}>Broker Dashboard</h1>
       </header>
 
       <section>
+        <div style={{ height: "3rem", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", overflow: "auto" }}>
+          {statusMessage && (
+            <p style={{ color: "green", margin: 0, fontWeight: "bold" }}>{statusMessage}</p>
+          )}
+          {errorMessage && (
+            <p style={{ color: "red", margin: 0, fontWeight: "bold" }}>{errorMessage}</p>
+          )}
+        </div>
+        <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem", alignItems: "center" }}>
+          <div style={{ fontSize: "0.95rem", color: "#333" }}>
+            <strong>Your Deposit:</strong> {currentBrokerDeposit} ETH
+          </div>
+          <div style={{ fontSize: "0.95rem", color: "#333" }}>
+            <strong>Required:</strong>{' '}
+            {requiredBrokerDeposit === "N/A" ? (
+              <span style={{ color: "#c43", fontStyle: "italic" }}>N/A — update/redeploy DAO</span>
+            ) : (
+              <span>{requiredBrokerDeposit} ETH</span>
+            )}
+          </div>
+        </div>
+        {isBroker && (
+          <div style={{ marginBottom: "1.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input
+              type="text"
+              placeholder="Deposit amount (ETH)"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+              style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px", width: "220px" }}
+            />
+            <button
+              onClick={() => void handleDeposit()}
+              disabled={depositing}
+              style={{ padding: "0.4rem 0.8rem", background: "#f0f0f0", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", fontSize: "0.85rem" }}
+            >
+              {depositing ? "Pending..." : "Deposit"}
+            </button>
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
           <h2 style={{ margin: 0 }}>Orders Queue From DAO</h2>
           <button 
@@ -150,7 +230,7 @@ export default function BrokerPage() {
                       </p>
                     </div>
 
-                    <div style={{ width: "220px", textAlign: "right" }}>
+                    <div style={{ width: "260px", textAlign: "right" }}>
                       {isBuy ? (
                         /* BUY ORDER VIEW */
                         <>
@@ -216,7 +296,7 @@ export default function BrokerPage() {
                       )}
 
                       <button
-                        disabled={executingId === proposal.id}
+                        disabled={executingId === proposal.id || proposal.executed}
                         onClick={() => void handleExecuteOrder(proposal)}
                         style={{
                           padding: "0.6rem",
@@ -229,7 +309,12 @@ export default function BrokerPage() {
                           transition: "background 0.2s"
                         }}
                       >
-                        {executingId === proposal.id ? "Processing..." : "Execute Order"}
+                        {executingId === proposal.id 
+                          ? "Processing..." 
+                          : proposal.executed 
+                            ? "Executed ✓" 
+                            : "Execute Order"
+                        }
                       </button>
                     </div>
                   </div>
