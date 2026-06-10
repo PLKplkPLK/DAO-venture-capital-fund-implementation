@@ -92,10 +92,9 @@ contract InvestmentBroker {
         uint8 stock,
         bool isBuy
     ) external onlyBroker returns (uint256) {
-        
         // 1. Retrieve proposal and verify it's eligible for execution
         (, , uint256 buyAmount, , uint256 sellAmount, uint256 yesVotes, uint256 noVotes, , uint256 endTime, bool executed) = dao.proposals(proposalId);
-        
+
         require(!executed, "Order already filled");
         require(block.timestamp >= endTime, "Voting is still active in DAO");
         require(yesVotes > noVotes, "Proposal failed voting requirements");
