@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getNFTContractAddress, getNFTContractABI, getBrowserProvider } from "@/app/bc/utils";
+import { fetchAuditData, submitAuditVote, finalizeAudit, type AuditData } from "@/app/bc/daoContract";
+import Balance from "../components/balance";
 
 const STOCKS = ["S&P 500", "Wheat", "Apple"];
 
@@ -11,80 +13,98 @@ interface TransactionNFTData {
   proposalId: string;
   stockName: string;
   type: "BUY" | "SELL";
-  rawAmount: string; // Przechowuje surową, sformatowaną wartość z kontraktu
+  rawAmount: string;
   price: string;
   timestamp: string;
+  brokerAddress: string;
+  audit: AuditData | null;
 }
 
 export default function BrokerPortfolioPage() {
   const [nfts, setNfts] = useState<TransactionNFTData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+
+  async function loadNFTs() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const provider = await getBrowserProvider();
+      const nftAddress = getNFTContractAddress();
+      const nftAbi = getNFTContractABI();
+      const nftContract = new ethers.Contract(nftAddress, nftAbi, provider);
+
+      const nextId: bigint = await nftContract.nextTransactionId();
+      const totalCount = Number(nextId);
+
+      const fetchedNfts: TransactionNFTData[] = [];
+      for (let i = 0; i < totalCount; i++) {
+        const txData = await nftContract.getTransaction(i);
+        const propId = txData.proposalId ?? txData[0];
+        const stockIndex = txData.stock ?? txData[1];
+        const txType = txData.transactionType ?? txData[2];
+        const amountVal = txData.amount ?? txData[3];
+        const priceVal = txData.price ?? txData[4];
+        const brokerAddr = txData.broker ?? txData[5];
+        const timeVal = txData.timestamp ?? txData[6];
+
+        const auditData = await fetchAuditData(i, propId);
+
+        fetchedNfts.push({
+          id: i.toString(),
+          proposalId: propId.toString(),
+          stockName: STOCKS[Number(stockIndex)] || `Unknown (${stockIndex})`,
+          type: Number(txType) === 0 ? "BUY" : "SELL",
+          rawAmount: ethers.formatEther(amountVal),
+          price: ethers.formatEther(priceVal),
+          timestamp: new Date(Number(timeVal) * 1000).toLocaleString(),
+          brokerAddress: brokerAddr,
+          audit: auditData
+      });
+      }
+
+      setNfts(fetchedNfts);
+    } catch (err: any) {
+      console.error("Error loading NFT portfolio:", err);
+      setError(err.message || "Failed to fetch NFT data.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadNFTs() {
-      try {
-        setLoading(true);
-        setError("");
-
-        const provider = await getBrowserProvider();
-        const nftAddress = getNFTContractAddress();
-        const nftAbi = getNFTContractABI();
-        const nftContract = new ethers.Contract(nftAddress, nftAbi, provider);
-
-        const signer = await provider.getSigner();
-        const brokerEOA = await signer.getAddress();
-
-        let tokenIds: bigint[] = [];
-        try {
-          tokenIds = await nftContract.getBrokerTransactions(brokerEOA);
-        } catch (err) {
-          const nextId: bigint = await nftContract.nextTransactionId();
-          const ids: bigint[] = [];
-          for (let i = 0; i < Number(nextId); i++) {
-            try {
-              const tx = await nftContract.getTransaction(i);
-              if ((tx.broker as string).toLowerCase() === brokerEOA.toLowerCase()) {
-                ids.push(BigInt(i));
-              }
-            } catch (e) {
-            }
-          }
-          tokenIds = ids;
-        }
-
-        const fetchedNfts: TransactionNFTData[] = [];
-        for (const id of tokenIds) {
-          const txData = await nftContract.getTransaction(id);
-          const propId = txData.proposalId ?? txData[0];
-          const stockIndex = txData.stock ?? txData[1];
-          const txType = txData.transactionType ?? txData[2];
-          const amountVal = txData.amount ?? txData[3];
-          const priceVal = txData.price ?? txData[4];
-          const timeVal = txData.timestamp ?? txData[6];
-
-          fetchedNfts.push({
-            id: id.toString(),
-            proposalId: propId.toString(),
-            stockName: STOCKS[Number(stockIndex)] || `Unknown (${stockIndex})`,
-            type: Number(txType) === 0 ? "BUY" : "SELL",
-            rawAmount: ethers.formatEther(amountVal),
-            price: ethers.formatEther(priceVal),
-            timestamp: new Date(Number(timeVal) * 1000).toLocaleString()
-          });
-        }
-
-        setNfts(fetchedNfts);
-      } catch (err: any) {
-        console.error("Error loading NFT portfolio:", err);
-        setError(err.message || "Failed to fetch NFT data.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadNFTs();
   }, []);
+
+  // Handler for casting governance appraisal votes (Approve vs Slash)
+  const handleAuditVote = async (nftId: string, choice: number) => {
+    setActionLoading(`${nftId}-vote`);
+    try {
+      await submitAuditVote(Number(nftId), choice);
+      await loadNFTs();
+    } catch (err: any) {
+      alert(err.message || "Voting failed.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handler to finalize an expired audit and trigger slash parameters on-chain
+  const handleFinalizeAudit = async (nftId: string) => {
+    setActionLoading(`${nftId}-finalize`);
+    console.log(nftId);
+    try {
+      await finalizeAudit(Number(nftId));
+      await loadNFTs();
+    } catch (err: any) {
+      alert(err.message || "Finalization failed.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (loading) return <div style={{ padding: "2rem", fontFamily: "sans-serif", textAlign: "center" }}>Querying DAO treasury for NFT certificates...</div>;
   if (error) return <div style={{ padding: "2rem", fontFamily: "sans-serif", color: "red", textAlign: "center" }}>Configuration or network error: {error}</div>;
@@ -94,6 +114,10 @@ export default function BrokerPortfolioPage() {
       <header style={{ borderBottom: "1px solid #ccc", paddingBottom: "1rem", marginBottom: "1rem" }}>
         <h1 style={{ margin: 0 }}>DAO Treasury — NFT Certificates</h1>
       </header>
+
+      <section style={{ marginBottom: "1.75rem" }}>
+        <Balance />
+      </section>
 
       <p style={{ color: "#666", marginBottom: "1rem" }}>
         The items below represent immutable trade receipts generated by the Broker and held on-chain as ERC-721 tokens owned by the HedgeFundDAO.
@@ -111,7 +135,6 @@ export default function BrokerPortfolioPage() {
             const priceNum = Number(nft.price);
             const rawAmountNum = Number(nft.rawAmount);
 
-            // Wyliczanie wartości zgodnie z logiką matematyczną kontraktu
             const unitsField = isBuy 
               ? (priceNum > 0 ? (rawAmountNum / priceNum).toFixed(4) : "0")
               : rawAmountNum.toFixed(4);
@@ -119,6 +142,9 @@ export default function BrokerPortfolioPage() {
             const ethField = isBuy 
               ? rawAmountNum.toFixed(1)
               : (priceNum > 0 ? (rawAmountNum * priceNum).toFixed(1) : "0");
+
+            const isAuditActive = nft.audit && Math.floor(Date.now() / 1000) < nft.audit.auditEndTime && !nft.audit.auditClosed;
+            const isAuditExpired = nft.audit && Math.floor(Date.now() / 1000) >= nft.audit.auditEndTime && !nft.audit.auditClosed;
 
             return (
               <div key={nft.id} style={{ border: "1px solid #ddd", borderRadius: "8px", padding: "1rem", background: "#f9f9f9" }}>
@@ -130,6 +156,11 @@ export default function BrokerPortfolioPage() {
                 </div>
 
                 <div style={{ background: "white", padding: "0.75rem", borderRadius: "6px", marginBottom: "0.75rem", border: "1px solid #eee" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+                    <span style={{ color: "#666" }}>Broker</span>
+                    <span style={{ fontFamily: "monospace" }}>{nft.brokerAddress}</span>
+                  </div>
+
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
                     <span style={{ color: "#666" }}>Token ID</span>
                     <span style={{ fontFamily: "monospace" }}>#{nft.id}</span>
@@ -155,9 +186,86 @@ export default function BrokerPortfolioPage() {
                     <span style={{ fontWeight: 600, color: "#d97706" }}>{Number(nft.price).toFixed(1)} ETH</span>
                   </div>
                 </div>
-                <div style={{ marginTop: "0.6rem", color: "#666", fontSize: "0.85rem", textAlign: "right", borderTop: "1px dashed #eee", paddingTop: "0.4rem" }}>
+
+                <div style={{ marginTop: "0.6rem", color: "#666", fontSize: "0.85rem", textAlign: "right", borderTop: "1px dashed #eee", paddingTop: "0.4rem", marginBottom: "1rem" }}>
                   <span style={{ fontFamily: "monospace" }}>{nft.timestamp}</span>
                 </div>
+
+                <div style={{ borderTop: "1px solid #eee", paddingTop: "1rem", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div>
+                    <h4 style={{ margin: "0 0 0.5rem 0", color: "#333", fontSize: "0.95rem" }}>Audit</h4>
+                    
+                    {!nft.audit ? (
+                      <p style={{ fontStyle: "italic", color: "#999", fontSize: "0.85rem" }}>Audit process uninitialized or missing on the DAO contract side.</p>
+                    ) : (
+                      <>
+                        <div style={{ background: "#fff", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1px solid #eee", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                            <span style={{ color: "green", fontWeight: "600" }}>Approve:</span>
+                            <span>{Number(nft.audit.approveVotes).toFixed(2)} votes</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "red", fontWeight: "600" }}>Slash</span>
+                            <span>{Number(nft.audit.slashVotes).toFixed(2)} votes</span>
+                          </div>
+                        </div>
+
+                        {isAuditActive && (
+                          <div style={{ fontSize: "0.8rem", color: "#2563eb", marginBottom: "0.5rem" }}>
+                            Voting Active. Ends: <strong>{new Date(nft.audit.auditEndTime * 1000).toLocaleTimeString()}</strong>
+                          </div>
+                        )}
+
+                        {nft.audit.auditClosed && (
+                          <div style={{ padding: "0.4rem", borderRadius: "4px", textAlign: "center", fontSize: "0.85rem", fontWeight: "bold", background: nft.audit.brokerSlashed ? "#fef2f2" : "#f0fdf4", color: nft.audit.brokerSlashed ? "#991b1b" : "#166534" }}>
+                            {nft.audit.brokerSlashed ? "Broker Slashed (-50% Deposit)" : "Trade Verified & Passed"}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {nft.audit && !nft.audit.auditClosed && (
+                    <div style={{ marginTop: "1rem" }}>
+                      {isAuditActive && (
+                        <>
+                          <p style={{ fontSize: "0.75rem", margin: "0 0 0.5rem 0", color: "#555" }}>
+                            {nft.audit.userCanVote 
+                              ? "You participated in the voting for this proposal. Please rate the broker's execution quality:" 
+                              : nft.audit.userHasVoted ? "Your governance vote for this audit is already registered." : "You did not participate in the voting for Proposal #" + nft.proposalId + ", so you do not hold voting power for this audit."}
+                          </p>
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <button
+                              disabled={!nft.audit.userCanVote || actionLoading !== null}
+                              onClick={() => handleAuditVote(nft.id, 1)}
+                              style={{ flex: 1, padding: "0.4rem", background: "#10b981", color: "#fff", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: (!nft.audit.userCanVote || actionLoading !== null) ? "not-allowed" : "pointer", opacity: nft.audit.userCanVote ? 1 : 0.5 }}
+                            >
+                              {actionLoading === `${nft.id}-vote` ? "..." : "Approve"}
+                            </button>
+                            <button
+                              disabled={!nft.audit.userCanVote || actionLoading !== null}
+                              onClick={() => handleAuditVote(nft.id, 2)}
+                              style={{ flex: 1, padding: "0.4rem", background: "#ef4444", color: "#fff", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: (!nft.audit.userCanVote || actionLoading !== null) ? "not-allowed" : "pointer", opacity: nft.audit.userCanVote ? 1 : 0.5 }}
+                            >
+                              {actionLoading === `${nft.id}-vote` ? "..." : "Slash"}
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {isAuditExpired && (
+                        <button
+                          disabled={actionLoading !== null}
+                          onClick={() => handleFinalizeAudit(nft.id)}
+                          style={{ width: "100%", padding: "0.5rem", background: "#4b5563", color: "#fff", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}
+                        >
+                          {actionLoading === `${nft.id}-finalize` ? "Resolving..." : "Finalize Audit"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
               </div>
             );
           })}

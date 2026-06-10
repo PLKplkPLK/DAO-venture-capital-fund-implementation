@@ -358,3 +358,145 @@ export async function getAllPortfolioStocks(): Promise<Record<string, string>> {
   }
   return holdings;
 }
+
+export async function depositBroker(amountEth: string) {
+  if (!amountEth || Number(amountEth) <= 0) {
+    throw new Error("Enter a deposit amount greater than 0.");
+  }
+
+  try {
+    const signer = await getSigner();
+    const daoContract = await getDaoContract(signer);
+    const value = ethers.parseEther(amountEth);
+
+    const tx = await daoContract.depositBroker({ value });
+    await tx.wait();
+    return `Broker deposit of ${amountEth} ETH submitted.`;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function getBrokerDeposit(brokerAddress?: string): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  try {
+    let addr = brokerAddress;
+    if (!addr) {
+      addr = await getUserAddress();
+    }
+    const amount = await contract.brokerDepositOf(addr);
+    return ethers.formatEther(amount);
+  } catch (error) {
+    console.error("Error getting broker deposit:", error);
+    return "0";
+  }
+}
+
+export async function getRequiredBrokerDeposit(): Promise<string> {
+  const browserProvider = await getBrowserProvider();
+  console.log(getContractABI());
+  const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  try {
+    const amount = await contract.requiredBrokerDeposit();
+    return ethers.formatEther(amount);
+  } catch (error) {
+    console.error("Error getting required broker deposit:", error);
+    return "N/A";
+  }
+}
+
+
+export interface AuditData {
+  nftTokenId: number;
+  proposalId: number;
+  approveVotes: string;
+  slashVotes: string;
+  auditEndTime: number;
+  auditClosed: boolean;
+  brokerSlashed: boolean;
+  userCanVote: boolean;
+  userHasVoted: boolean;
+}
+
+/**
+ * @notice Fetches the auditing state of a specific transaction certificate NFT from the DAO contract.
+ * @param nftTokenId Unique token ID of the receipt NFT.
+ * @param proposalId Linked proposal ID to check original voting eligibility.
+ */
+/**
+ * Fetch audit record and computed eligibility for the currently connected user.
+ * Returns `null` if no audit record exists for the given token id.
+ */
+export async function fetchAuditData(nftTokenId: number, proposalId: number): Promise<AuditData | null> {
+  try {
+    const browserProvider = await getBrowserProvider();
+    const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+    const userAddress = await getUserAddress();
+
+    const rawAudit = await contract.audits(nftTokenId);
+
+    // auditEndTime (index 4) of zero means record is not initialized
+    if (Number(rawAudit[4]) === 0) return null;
+
+    const nftIdVal = rawAudit.nftTokenId ?? rawAudit[0];
+    const propIdVal = rawAudit.proposalId ?? rawAudit[1];
+    const approveVotesVal = rawAudit.approveVotes ?? rawAudit[2];
+    const slashVotesVal = rawAudit.slashVotes ?? rawAudit[3];
+    const auditEndTime = rawAudit.auditEndTime ?? rawAudit[4];
+    const auditClosedVal = rawAudit.auditClosed ?? rawAudit[5];
+    const brokerSlashedVal = rawAudit.brokerSlashed ?? rawAudit[6];
+
+    const originalVote = await contract.userVotes(proposalId, userAddress);
+    const userVotedInBaseline = Number(originalVote) === 1 || Number(originalVote) === 2;
+    const userHasVoted = await contract.hasVotedInAudit(nftTokenId, userAddress);
+
+    return {
+      nftTokenId: Number(nftIdVal),
+      proposalId: Number(propIdVal),
+      approveVotes: ethers.formatEther(approveVotesVal),
+      slashVotes: ethers.formatEther(slashVotesVal),
+      auditEndTime: Number(auditEndTime),
+      auditClosed: Boolean(auditClosedVal),
+      brokerSlashed: Boolean(brokerSlashedVal), // <-- This will now correctly evaluate to true
+      userCanVote: userVotedInBaseline && !userHasVoted && !Boolean(auditClosedVal),
+      userHasVoted: userHasVoted,
+    };
+  } catch (error) {
+    console.error(`fetchAuditData: failed for token=${nftTokenId}, proposal=${proposalId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Submit an audit vote.
+ * choice: 1 = Approve, 2 = Slash
+ */
+export async function submitAuditVote(nftTokenId: number, choice: number): Promise<string> {
+  try {
+    const signer = await getSigner();
+    const contract = await getDaoContract(signer);
+    const tx = await contract.voteOnAudit(nftTokenId, choice);
+    await tx.wait();
+    return choice === 1 ? "Audit vote recorded: Approved." : "Audit vote recorded: Slashed.";
+  } catch (error) {
+    console.error(`submitAuditVote: failed for token=${nftTokenId}, choice=${choice}:`, error);
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+/**
+ * Finalize an audit.
+ */
+export async function finalizeAudit(nftTokenId: number): Promise<string> {
+  try {
+    const signer = await getSigner();
+    const contract = await getDaoContract(signer);
+    const tx = await contract.finalizeAudit(nftTokenId);
+    await tx.wait();
+    return "Audit finalized on-chain.";
+  } catch (error) {
+    console.error(`finalizeAudit: failed for token=${nftTokenId}:`, error);
+    throw new Error(getErrorMessage(error));
+  }
+}
