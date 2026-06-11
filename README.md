@@ -49,16 +49,17 @@ Use wsl on Windows.
 Before running
 
 ```sh
-cd frontend && npm run dev
+forge script script/Deploy.s.sol:DeployScript --rpc-url "https://eth-sepolia.g.alchemy.com/v2/..." --broadcast --verify -vvvv
 ```
 
-Make sure you have below env variables set `$env:RPC_URL="..."`.
+Make sure you have below env variables set `$env:RPC_URL="..."` for frontend app.
 
 ```
 RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/..."
-PUBLIC_CHAIN_ID = "11155111"  # sepolia ID
+NEXT_PUBLIC_CHAIN_ID = "11155111"  # sepolia ID
 
-NEXT_PUBLIC_DAO_CONTRACT_ADDRESS=""
-NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS=""
-NEXT_PUBLIC_NFT_CONTRACT_ADDRESS=""
+NEXT_PUBLIC_DAO_CONTRACT_ADDRESS="0xbBB566007Bc1Ec63d9518805A0EEb8d27Dc0A2D3"
+NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS="0x098540e5e8Bc875a413887bF4a16752c5c06b81f"
+NEXT_PUBLIC_NFT_CONTRACT_ADDRESS="0x88D4bad5415124B0621cD8E80aE1a47d9D046f2C"
+ORACLE_CONTRACT_ADDRESS="0xCf414260E7265c2EDF902D627DAa7bC473d7D01E"
 ```

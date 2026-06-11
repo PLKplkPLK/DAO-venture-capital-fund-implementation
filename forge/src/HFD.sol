@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 enum Stock {
     BTC,
     LINK,
-    SOL
+    ETH
 }
 
 /// @dev Interface for price oracle to get stock prices
@@ -380,8 +380,8 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         super._update(from, to, value);
     }
 
-    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
-        return super.nonces(owner);
+    function nonces(address account) public view override(ERC20Permit, Nonces) returns (uint256) {
+        return super.nonces(account);
     }
 
     // ========== Audit Functions ==========

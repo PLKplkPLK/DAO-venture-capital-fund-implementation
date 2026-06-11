@@ -66,12 +66,12 @@ export async function GET(request: Request) {
     }
 
     if (action === "all") {
-      const [btc, link, sol] = await Promise.all([
-        fetchStockQuote("^GSPC"),
-        fetchStockQuote("ZWZ24.XCBT"),
-        fetchStockQuote("AAPL"),
+      const [btc, link, eth] = await Promise.all([
+        fetchStockQuote("BTC-USD"),
+        fetchStockQuote("LINK-USD"),
+        fetchStockQuote("ETH-USD"),
       ]);
-      return NextResponse.json([btc, link, sol]);
+      return NextResponse.json([btc, link, eth]);
     }
 
     return NextResponse.json(

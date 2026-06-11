@@ -15,7 +15,7 @@ import {
 } from "@/app/bc/daoContract";
 import Balance from "../components/balance";
 
-const STOCKS = ["BTC", "LINK", "SOL"];
+const STOCKS = ["BTC", "LINK", "ETH"];
 
 interface TransactionNFTData {
   id: string;

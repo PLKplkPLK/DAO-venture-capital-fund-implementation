@@ -9,7 +9,7 @@ contract MockPriceOracle is IPriceOracle {
     // Mock prices with normal distribution
     // Stock 0: BTC - mean: 7500, sd: 75
     // Stock 1: LINK - mean: 25, sd: 0.25
-    // Stock 2: SOL - mean: 300, sd: 3
+    // Stock 2: ETH - mean: 300, sd: 3
     
     address public owner;
 

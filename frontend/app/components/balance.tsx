@@ -55,10 +55,20 @@ export default function Balance() {
 
     setupEventListener();
 
+    // Refresh when the user connects, unlocks, or switches accounts so the
+    // share balance appears as soon as a wallet becomes available.
+    const ethereum =
+      typeof window !== "undefined" ? (window as any).ethereum : undefined;
+    const handleAccountsChanged = () => {
+      void fetchBalances();
+    };
+    ethereum?.on?.("accountsChanged", handleAccountsChanged);
+
     return () => {
       if (cleanupTransferListener) {
         cleanupTransferListener();
       }
+      ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
     };
   }, []);
 

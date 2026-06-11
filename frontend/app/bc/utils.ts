@@ -30,6 +30,7 @@ const DAO_CONTRACT_ABI = [
   "function vote(uint256 proposalId, uint8 choice)",
   "function getFundTotalValue() view returns (uint256)",
   "function priceOracle() view returns (address)",
+  "function totalSupply() view returns (uint256)",
   "function nftContract() view returns (address)",
   "function brokerDepositOf(address) view returns (uint256)",
   "function requiredBrokerDeposit() view returns (uint256)",
@@ -99,23 +100,44 @@ async function getBrowserProvider() {
   return provider;
 }
 
+function requireAddress(
+  value: string | undefined,
+  envVarName: string,
+): string {
+  if (!value) {
+    throw new Error(
+      `${envVarName} is not configured. Set it in frontend/.env and restart the dev server.`,
+    );
+  }
+  return value;
+}
+
 function getContractABI() {
   return DAO_CONTRACT_ABI;
 }
 
-function getContractAddress() {
-  return DAO_CONTRACT_ADDRESS;
+function getContractAddress(): string {
+  return requireAddress(
+    DAO_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_DAO_CONTRACT_ADDRESS",
+  );
 }
 
-function getBrokerContractAddress() {
-  return BROKER_CONTRACT_ADDRESS;
+function getBrokerContractAddress(): string {
+  return requireAddress(
+    BROKER_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS",
+  );
 }
 function getBrokerContractABI() {
   return BROKER_CONTRACT_ABI;
 }
 
-function getNFTContractAddress() {
-  return NFT_CONTRACT_ADDRESS;
+function getNFTContractAddress(): string {
+  return requireAddress(
+    NFT_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_NFT_CONTRACT_ADDRESS",
+  );
 }
 
 function getNFTContractABI() {

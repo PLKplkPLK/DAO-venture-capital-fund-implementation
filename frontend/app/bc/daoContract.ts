@@ -34,6 +34,29 @@ export async function getUserAddress(): Promise<string> {
   return await signer.getAddress();
 }
 
+/**
+ * Returns the currently connected wallet address WITHOUT prompting the user to
+ * connect or unlock (uses `eth_accounts`, not `eth_requestAccounts`). Returns
+ * `null` when no account is authorized or the wallet is locked.
+ *
+ * Use this for read-only UI (e.g. showing a balance) so the page never hangs on
+ * "Loading..." waiting for a MetaMask popup. Use `getUserAddress()` only for
+ * actions that genuinely require a connected signer (deposit, withdraw, vote).
+ */
+export async function getConnectedAddress(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const ethereum = (window as any).ethereum;
+  if (!ethereum) return null;
+  try {
+    const accounts: string[] = await ethereum.request({
+      method: "eth_accounts",
+    });
+    return accounts && accounts.length > 0 ? accounts[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getDaoContract(signer: ethers.Signer) {
   const address = getContractAddress();
   if (!address) {
@@ -84,7 +107,7 @@ export type Proposal = {
   executed: boolean;
 };
 
-const STOCK_LABELS = ["BTC", "LINK", "SOL"];
+const STOCK_LABELS = ["BTC", "LINK", "ETH"];
 
 function getStockLabel(stock: number) {
   return STOCK_LABELS[stock] ?? `Stock #${stock}`;
@@ -97,16 +120,21 @@ export const STOCKS = STOCK_LABELS.map((label, index) => ({
 
 export async function getBalances(): Promise<DaoBalances> {
   const browserProvider = await getBrowserProvider();
-  const userAddress = await getUserAddress();
+  const daoAddress = getContractAddress();
   const contract = new ethers.Contract(
-    getContractAddress(),
+    daoAddress,
     getContractABI(),
     browserProvider,
   );
 
+  // The fund total never needs a connected account.
+  // The user's share balance is read only when a wallet is already connected —
+  // we intentionally avoid eth_requestAccounts here so the balance display can
+  // never hang on "Loading..." while waiting for a connect/unlock popup.
+  const userAddress = await getConnectedAddress();
   const [balanceWei, fundBalance] = await Promise.all([
-    contract.balanceOf(userAddress),
-    browserProvider.getBalance(getContractAddress()),
+    userAddress ? contract.balanceOf(userAddress) : Promise.resolve(0n),
+    browserProvider.getBalance(daoAddress),
   ]);
 
   return {
@@ -163,24 +191,44 @@ export async function fetchAllProposals(): Promise<Proposal[]> {
 
 export async function createBuyProposal(
   toBuy: number,
-  buyAmount: string,
+  buyAmountWei: string,
 ): Promise<string> {
+  if (!buyAmountWei)
+    throw new Error("Enter a buy amount in wei greater than 0.");
+  try {
+    const desired = BigInt(buyAmountWei);
+    if (desired <= 0n)
+      throw new Error("Enter a buy amount in wei greater than 0.");
+  } catch (e) {
+    throw new Error("Invalid buy amount (must be an integer wei string).");
+  }
+
   const signer = await getSigner();
   const daoContract = await getDaoContract(signer);
-  const buyAmountWei = ethers.parseEther(buyAmount);
-  const tx = await daoContract.createBuyProposal(toBuy, buyAmountWei);
+  const buyAmountParsed = ethers.parseUnits(buyAmountWei, 0);
+  const tx = await daoContract.createBuyProposal(toBuy, buyAmountParsed);
   await tx.wait();
   return "Buy proposal created successfully.";
 }
 
 export async function createSellProposal(
   toSell: number,
-  sellAmount: string,
+  sellAmountWei: string,
 ): Promise<string> {
+  if (!sellAmountWei)
+    throw new Error("Enter a sell amount in wei greater than 0.");
+  try {
+    const desired = BigInt(sellAmountWei);
+    if (desired <= 0n)
+      throw new Error("Enter a sell amount in wei greater than 0.");
+  } catch (e) {
+    throw new Error("Invalid sell amount (must be an integer wei string).");
+  }
+
   const signer = await getSigner();
   const daoContract = await getDaoContract(signer);
-  const sellAmountWei = ethers.parseEther(sellAmount);
-  const tx = await daoContract.createSellProposal(toSell, sellAmountWei);
+  const sellAmountParsed = ethers.parseUnits(sellAmountWei, 0);
+  const tx = await daoContract.createSellProposal(toSell, sellAmountParsed);
   await tx.wait();
   return "Sell proposal created successfully.";
 }
@@ -231,16 +279,18 @@ export async function subscribeToTransferEvents(
   };
 }
 
-export async function depositToDao(amountEth: string) {
-  if (!amountEth || Number(amountEth) <= 0) {
-    throw new Error("Enter a deposit amount greater than 0.");
-  }
-
+export async function depositToDao(amountWei: string) {
+  if (!amountWei)
+    throw new Error("Enter a deposit amount greater than 0 (in wei).");
   try {
+    const desired = BigInt(amountWei);
+    if (desired <= 0n)
+      throw new Error("Enter a deposit amount greater than 0 (in wei).");
+
     const signer = await getSigner();
     const daoContract = await getDaoContract(signer);
     const userAddress = await signer.getAddress();
-    const value = ethers.parseEther(amountEth);
+    const value = ethers.parseUnits(amountWei, 0); // amount provided in wei
 
     // 1. Execute the Deposit
     const tx = await daoContract.buyShares({ value });
@@ -257,26 +307,46 @@ export async function depositToDao(amountEth: string) {
       return `Deposit successful and voting power automatically activated!`;
     }
 
-    return `Deposit of ${amountEth} ETH sent.`;
+    return `Deposit of ${amountWei} wei sent.`;
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
 }
 
-export async function withdrawFromDao(amountDao: string) {
-  if (!amountDao || Number(amountDao) <= 0) {
-    throw new Error("Enter a withdrawal amount greater than 0.");
-  }
-
+export async function withdrawFromDao(amountWei: string) {
+  if (!amountWei)
+    throw new Error("Enter a withdrawal amount greater than 0 (in wei).");
   try {
+    const desiredWei = BigInt(amountWei);
+    if (desiredWei <= 0)
+      throw new Error("Enter a withdrawal amount greater than 0 (in wei).");
+
     const signer = await getSigner();
     const daoContract = await getDaoContract(signer);
-    const withdrawalAmount = ethers.parseUnits(amountDao, 18);
 
-    const tx = await daoContract.retrieveEth(withdrawalAmount);
+    // Fetch fund totals to determine corresponding token amount to burn
+    const totalValue: bigint = await daoContract.getFundTotalValue();
+    const totalSupply: bigint = await daoContract.totalSupply();
+
+    if (totalValue === 0n) {
+      throw new Error(
+        "Fund has zero value; cannot compute token amount to burn.",
+      );
+    }
+
+    // tokenAmount = (desiredWei * totalSupply) / totalValue
+    const tokenAmount = (desiredWei * totalSupply) / totalValue;
+
+    if (tokenAmount <= 0n) {
+      throw new Error(
+        "Requested withdrawal is too small to convert to fund tokens.",
+      );
+    }
+
+    const tx = await daoContract.retrieveEth(tokenAmount);
     await tx.wait();
 
-    return `Withdraw request for ${amountDao} DAO submitted.`;
+    return `Withdraw request for ${amountWei} wei submitted.`;
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
@@ -367,19 +437,21 @@ export async function getAllPortfolioStocks(): Promise<Record<string, string>> {
   return holdings;
 }
 
-export async function depositBroker(amountEth: string) {
-  if (!amountEth || Number(amountEth) <= 0) {
-    throw new Error("Enter a deposit amount greater than 0.");
-  }
-
+export async function depositBroker(amountWei: string) {
+  if (!amountWei)
+    throw new Error("Enter a deposit amount greater than 0 (in wei).");
   try {
+    const desired = BigInt(amountWei);
+    if (desired <= 0n)
+      throw new Error("Enter a deposit amount greater than 0 (in wei).");
+
     const signer = await getSigner();
     const daoContract = await getDaoContract(signer);
-    const value = ethers.parseEther(amountEth);
+    const value = ethers.parseUnits(amountWei, 0);
 
     const tx = await daoContract.depositBroker({ value });
     await tx.wait();
-    return `Broker deposit of ${amountEth} ETH submitted.`;
+    return `Broker deposit of ${amountWei} wei submitted.`;
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }

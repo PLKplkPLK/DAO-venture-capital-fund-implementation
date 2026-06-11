@@ -86,8 +86,8 @@ contract InvestmentBroker {
     /**
      * @notice Called by the Broker to log execution details and mint a proof-of-trade NFT for the DAO.
      * @param proposalId The ID of the approved governance proposal.
-     * @param stock Asset type ID (0 = BTC, 1 = LINK, 2 = SOL).
-     * @param isBuy True for BUY, false for SELL.
+     * @param stock Asset type ID (0 = BTC, 1 = LINK, 2 = ETH). Must match the asset the DAO voted on.
+     * @param isBuy True for BUY, false for SELL. Must match the proposal's side.
      * @return tokenId unique tokenId of the newly minted transaction NFT.
      */
     function executeOrder(
@@ -99,12 +99,20 @@ contract InvestmentBroker {
         require(dao.brokerDepositOf(msg.sender) >= dao.requiredBrokerDeposit(), "Broker deposit insufficient");
         
         // 1. Retrieve proposal and verify it's eligible for execution
-        (, , uint256 buyAmount, , uint256 sellAmount, uint256 yesVotes, uint256 noVotes, , uint256 endTime, bool executed) = dao.proposals(proposalId);
-        
+        (, uint8 toBuy, uint256 buyAmount, uint8 toSell, uint256 sellAmount, uint256 yesVotes, uint256 noVotes, , uint256 endTime, bool executed) = dao.proposals(proposalId);
+
         require(!executed, "Order already executed for this proposal");
         require(block.timestamp >= endTime, "Voting is still active in DAO");
         require(yesVotes > noVotes, "Proposal failed voting requirements");
         require(stock < 3, "Invalid stock ID");
+
+        // The broker must execute exactly what the DAO voted on: the side (buy/sell)
+        // and the asset are dictated by the proposal, not chosen by the broker.
+        if (isBuy) {
+            require(toBuy == stock, "Stock does not match the buy proposal");
+        } else {
+            require(toSell == stock, "Stock does not match the sell proposal");
+        }
 
         // 2. Get price from on-chain oracle
         uint256 currentMarketPrice = priceOracle.getPrice(stock);

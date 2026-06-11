@@ -8,7 +8,7 @@ import {
   PriceHistory,
 } from "../bc/priceOracle";
 
-const STOCK_LABELS = ["BTC", "LINK", "SOL"];
+const STOCK_LABELS = ["BTC", "LINK", "ETH"];
 const COLORS = ["#0b66ff", "#d63333", "#00a854"];
 
 // Simple SVG Line Chart Component

@@ -13,8 +13,8 @@ export type PriceHistory = {
 }[];
 
 // Yahoo Finance symbols for the stocks
-const STOCK_SYMBOLS = ["BTC-USD", "LINK-USD", "SOL-USD"];
-const STOCK_LABELS = ["BTC", "LINK", "SOL"];
+const STOCK_SYMBOLS = ["BTC-USD", "LINK-USD", "ETH-USD"];
+const STOCK_LABELS = ["BTC", "LINK", "ETH"];
 
 export async function getStockPrice(stockIndex: number): Promise<StockPrice> {
   try {

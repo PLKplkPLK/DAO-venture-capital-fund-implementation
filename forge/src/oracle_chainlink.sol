@@ -8,7 +8,7 @@ interface IPriceOracle {
 enum Asset {
     BTC,
     LINK,
-    SOL
+    ETH
 }
 
 interface AggregatorV3Interface {
@@ -28,16 +28,16 @@ contract ChainlinkPriceOracle is IPriceOracle {
 
     AggregatorV3Interface public btcFeed;
     AggregatorV3Interface public linkFeed;
-    AggregatorV3Interface public solFeed;
+    AggregatorV3Interface public ethFeed;
 
     constructor(
         address _btc,
         address _link,
-        address _sol
+        address _eth
     ) {
         btcFeed = AggregatorV3Interface(_btc);
         linkFeed = AggregatorV3Interface(_link);
-        solFeed = AggregatorV3Interface(_sol);
+        ethFeed = AggregatorV3Interface(_eth);
     }
 
     function getPrice(
@@ -57,7 +57,7 @@ contract ChainlinkPriceOracle is IPriceOracle {
         }
 
         if (stock == 2) {
-            return _readFeed(solFeed);
+            return _readFeed(ethFeed);
         }
 
         revert("Invalid asset");
@@ -72,6 +72,10 @@ contract ChainlinkPriceOracle is IPriceOracle {
     {
         (, int256 answer,,,) =
             feed.latestRoundData();
+
+        // Guard against a non-positive answer: casting a negative int256 to
+        // uint256 would wrap to an enormous value and corrupt valuations.
+        require(answer > 0, "Invalid feed price");
 
         // Chainlink returns 8 decimals
         // ERC20 uses 18 decimals
