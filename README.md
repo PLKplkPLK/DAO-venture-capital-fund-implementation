@@ -3,7 +3,7 @@
 React Next.js app - inside `frontend` directory.
 
 `cd frontend && npm run dev`
- 
+
 Local UI routes (when the frontend dev server is running):
 
 - **/** : main user view (home)
@@ -44,7 +44,21 @@ Use wsl on Windows.
 
 `anvil`
 
-# TODO
+# Deployed to Sepolia
 
-- broker
-- real oracle
+Before running
+
+```sh
+cd frontend && npm run dev
+```
+
+Make sure you have below env variables set `$env:RPC_URL="..."`.
+
+```
+RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/..."
+PUBLIC_CHAIN_ID = "11155111"  # sepolia ID
+
+NEXT_PUBLIC_DAO_CONTRACT_ADDRESS=""
+NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS=""
+NEXT_PUBLIC_NFT_CONTRACT_ADDRESS=""
+```

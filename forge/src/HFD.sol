@@ -310,7 +310,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         uint8 stock, 
         uint256 stockAmount, 
         bool isBuy
-    ) external {
+    ) external  onlyBrokerContract {
         // Basic existence check
         if (proposalId >= nextProposalId) revert("Proposal missing");
 
@@ -329,7 +329,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
             cashBalance -= ethSpent;
             // store portfolio amounts in 1e18 units for consistency with price oracle
-            portfolio[stock] += stockAmount * 1e18;
+            portfolio[stock] += stockAmount;
 
             proposal.executed = true;
 
@@ -337,7 +337,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             require(success, "ETH transfer to Broker failed");
         } else {
             // Sell: stockAmount passed in whole-units, compare with scaled portfolio
-            uint256 scaledAmount = stockAmount * 1e18;
+            uint256 scaledAmount = stockAmount;
             require(portfolio[stock] >= scaledAmount, "Not enough stock to sell");
             portfolio[stock] -= scaledAmount;
             cashBalance += ethGained;
