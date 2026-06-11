@@ -66,12 +66,12 @@ export async function GET(request: Request) {
     }
 
     if (action === "all") {
-      const [sp500, wheat, aapl] = await Promise.all([
+      const [btc, link, sol] = await Promise.all([
         fetchStockQuote("^GSPC"),
         fetchStockQuote("ZWZ24.XCBT"),
         fetchStockQuote("AAPL"),
       ]);
-      return NextResponse.json([sp500, wheat, aapl]);
+      return NextResponse.json([btc, link, sol]);
     }
 
     return NextResponse.json(

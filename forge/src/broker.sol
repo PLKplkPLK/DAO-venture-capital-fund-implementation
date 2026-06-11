@@ -86,7 +86,7 @@ contract InvestmentBroker {
     /**
      * @notice Called by the Broker to log execution details and mint a proof-of-trade NFT for the DAO.
      * @param proposalId The ID of the approved governance proposal.
-     * @param stock Asset type ID (0 = SP500, 1 = Wheat, 2 = Apple).
+     * @param stock Asset type ID (0 = BTC, 1 = LINK, 2 = SOL).
      * @param isBuy True for BUY, false for SELL.
      * @return tokenId unique tokenId of the newly minted transaction NFT.
      */

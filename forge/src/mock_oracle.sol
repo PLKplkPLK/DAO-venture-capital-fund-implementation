@@ -7,9 +7,9 @@ interface IPriceOracle {
 
 contract MockPriceOracle is IPriceOracle {
     // Mock prices with normal distribution
-    // Stock 0: S&P 500 - mean: 7500, sd: 75
-    // Stock 1: Wheat - mean: 25, sd: 0.25
-    // Stock 2: Apple - mean: 300, sd: 3
+    // Stock 0: BTC - mean: 7500, sd: 75
+    // Stock 1: LINK - mean: 25, sd: 0.25
+    // Stock 2: SOL - mean: 300, sd: 3
     
     address public owner;
 
@@ -31,13 +31,10 @@ contract MockPriceOracle is IPriceOracle {
         int256 normalizedValue = _boxMullerApproximation(randomValue);
         
         if (stock == 0) {
-            // S&P 500: mean 7500, sd 75
             return _calculatePrice(7500 * 1e18, 75 * 1e18, normalizedValue);
         } else if (stock == 1) {
-            // Wheat: mean 25, sd 0.25
             return _calculatePrice(25 * 1e18, 25 * 1e16, normalizedValue);
         } else {
-            // Apple: mean 300, sd 3
             return _calculatePrice(300 * 1e18, 3 * 1e18, normalizedValue);
         }
     }

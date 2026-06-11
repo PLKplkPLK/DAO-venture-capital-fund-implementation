@@ -84,7 +84,7 @@ export type Proposal = {
   executed: boolean;
 };
 
-const STOCK_LABELS = ["S&P 500", "Wheat", "Apple"];
+const STOCK_LABELS = ["BTC", "LINK", "SOL"];
 
 function getStockLabel(stock: number) {
   return STOCK_LABELS[stock] ?? `Stock #${stock}`;
@@ -335,14 +335,22 @@ export async function getPortfolioStock(stock: number): Promise<string> {
 
 export async function getPriceForStock(stock: number): Promise<string> {
   const browserProvider = await getBrowserProvider();
-  const daoContract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  const daoContract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
 
   try {
     const oracleAddress: string = await daoContract.priceOracle();
     if (!oracleAddress || oracleAddress === ethers.ZeroAddress) return "0";
 
     const oracleAbi = ["function getPrice(uint8) view returns (uint256)"];
-    const oracle = new ethers.Contract(oracleAddress, oracleAbi, browserProvider);
+    const oracle = new ethers.Contract(
+      oracleAddress,
+      oracleAbi,
+      browserProvider,
+    );
     const price = await oracle.getPrice(stock);
     return ethers.formatEther(price);
   } catch (error) {
@@ -377,9 +385,15 @@ export async function depositBroker(amountEth: string) {
   }
 }
 
-export async function getBrokerDeposit(brokerAddress?: string): Promise<string> {
+export async function getBrokerDeposit(
+  brokerAddress?: string,
+): Promise<string> {
   const browserProvider = await getBrowserProvider();
-  const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
   try {
     let addr = brokerAddress;
     if (!addr) {
@@ -396,7 +410,11 @@ export async function getBrokerDeposit(brokerAddress?: string): Promise<string> 
 export async function getRequiredBrokerDeposit(): Promise<string> {
   const browserProvider = await getBrowserProvider();
   console.log(getContractABI());
-  const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+  const contract = new ethers.Contract(
+    getContractAddress(),
+    getContractABI(),
+    browserProvider,
+  );
   try {
     const amount = await contract.requiredBrokerDeposit();
     return ethers.formatEther(amount);
@@ -405,7 +423,6 @@ export async function getRequiredBrokerDeposit(): Promise<string> {
     return "N/A";
   }
 }
-
 
 export interface AuditData {
   nftTokenId: number;
@@ -428,10 +445,17 @@ export interface AuditData {
  * Fetch audit record and computed eligibility for the currently connected user.
  * Returns `null` if no audit record exists for the given token id.
  */
-export async function fetchAuditData(nftTokenId: number, proposalId: number): Promise<AuditData | null> {
+export async function fetchAuditData(
+  nftTokenId: number,
+  proposalId: number,
+): Promise<AuditData | null> {
   try {
     const browserProvider = await getBrowserProvider();
-    const contract = new ethers.Contract(getContractAddress(), getContractABI(), browserProvider);
+    const contract = new ethers.Contract(
+      getContractAddress(),
+      getContractABI(),
+      browserProvider,
+    );
     const userAddress = await getUserAddress();
 
     const rawAudit = await contract.audits(nftTokenId);
@@ -448,8 +472,12 @@ export async function fetchAuditData(nftTokenId: number, proposalId: number): Pr
     const brokerSlashedVal = rawAudit.brokerSlashed ?? rawAudit[6];
 
     const originalVote = await contract.userVotes(proposalId, userAddress);
-    const userVotedInBaseline = Number(originalVote) === 1 || Number(originalVote) === 2;
-    const userHasVoted = await contract.hasVotedInAudit(nftTokenId, userAddress);
+    const userVotedInBaseline =
+      Number(originalVote) === 1 || Number(originalVote) === 2;
+    const userHasVoted = await contract.hasVotedInAudit(
+      nftTokenId,
+      userAddress,
+    );
 
     return {
       nftTokenId: Number(nftIdVal),
@@ -459,11 +487,15 @@ export async function fetchAuditData(nftTokenId: number, proposalId: number): Pr
       auditEndTime: Number(auditEndTime),
       auditClosed: Boolean(auditClosedVal),
       brokerSlashed: Boolean(brokerSlashedVal), // <-- This will now correctly evaluate to true
-      userCanVote: userVotedInBaseline && !userHasVoted && !Boolean(auditClosedVal),
+      userCanVote:
+        userVotedInBaseline && !userHasVoted && !Boolean(auditClosedVal),
       userHasVoted: userHasVoted,
     };
   } catch (error) {
-    console.error(`fetchAuditData: failed for token=${nftTokenId}, proposal=${proposalId}:`, error);
+    console.error(
+      `fetchAuditData: failed for token=${nftTokenId}, proposal=${proposalId}:`,
+      error,
+    );
     return null;
   }
 }
@@ -472,15 +504,23 @@ export async function fetchAuditData(nftTokenId: number, proposalId: number): Pr
  * Submit an audit vote.
  * choice: 1 = Approve, 2 = Slash
  */
-export async function submitAuditVote(nftTokenId: number, choice: number): Promise<string> {
+export async function submitAuditVote(
+  nftTokenId: number,
+  choice: number,
+): Promise<string> {
   try {
     const signer = await getSigner();
     const contract = await getDaoContract(signer);
     const tx = await contract.voteOnAudit(nftTokenId, choice);
     await tx.wait();
-    return choice === 1 ? "Audit vote recorded: Approved." : "Audit vote recorded: Slashed.";
+    return choice === 1
+      ? "Audit vote recorded: Approved."
+      : "Audit vote recorded: Slashed.";
   } catch (error) {
-    console.error(`submitAuditVote: failed for token=${nftTokenId}, choice=${choice}:`, error);
+    console.error(
+      `submitAuditVote: failed for token=${nftTokenId}, choice=${choice}:`,
+      error,
+    );
     throw new Error(getErrorMessage(error));
   }
 }

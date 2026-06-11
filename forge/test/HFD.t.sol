@@ -9,9 +9,9 @@ contract MockPriceOracle is IPriceOracle {
     mapping(uint8 => uint256) public prices;
 
     constructor() {
-        prices[0] = 1 ether;  // SP500
-        prices[1] = 0.5 ether; // Wheat
-        prices[2] = 0.1 ether; // Apple
+        prices[0] = 1 ether;  // BTC
+        prices[1] = 0.5 ether; // LINK
+        prices[2] = 0.1 ether; // SOL
     }
 
     function getPrice(uint8 stock) external view returns (uint256) {

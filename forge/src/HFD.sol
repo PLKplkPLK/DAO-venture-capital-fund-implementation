@@ -7,9 +7,9 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
 /// @dev Enum representing the available stocks the DAO can trade
 enum Stock {
-    SP500,  // 0 - S&P 500
-    Wheat,  // 1 - Wheat
-    Apple   // 2 - Apple
+    BTC,
+    LINK,
+    SOL
 }
 
 /// @dev Interface for price oracle to get stock prices

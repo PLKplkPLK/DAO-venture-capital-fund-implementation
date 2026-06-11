@@ -8,7 +8,7 @@ import {
   PriceHistory,
 } from "../bc/priceOracle";
 
-const STOCK_LABELS = ["S&P 500", "Wheat", "Apple"];
+const STOCK_LABELS = ["BTC", "LINK", "SOL"];
 const COLORS = ["#0b66ff", "#d63333", "#00a854"];
 
 // Simple SVG Line Chart Component
@@ -94,12 +94,12 @@ export default function StockCharts() {
     const fetchData = async () => {
       try {
         setError("");
-        const [sp500, wheat, apple] = await Promise.all([
+        const [btc, link, sol] = await Promise.all([
           getStockPrice(0),
           getStockPrice(1),
           getStockPrice(2),
         ]);
-        setPrices([sp500, wheat, apple]);
+        setPrices([btc, link, sol]);
 
         const [hist0, hist1, hist2] = await Promise.all([
           getStockPriceHistory(0, 30),
