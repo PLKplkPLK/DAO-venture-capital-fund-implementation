@@ -88,8 +88,8 @@ export async function getUserDaoBalance(userAddress: string): Promise<string> {
 }
 
 export type DaoBalances = {
-  userBalance: string;
-  fundTotal: string;
+  userBalance: string; // HFT token amount, full-precision decimal (formatEther)
+  fundTotalWei: string; // DAO contract ETH balance, raw wei
 };
 
 export type Proposal = {
@@ -139,7 +139,7 @@ export async function getBalances(): Promise<DaoBalances> {
 
   return {
     userBalance: ethers.formatEther(balanceWei),
-    fundTotal: ethers.formatEther(fundBalance),
+    fundTotalWei: fundBalance.toString(),
   };
 }
 

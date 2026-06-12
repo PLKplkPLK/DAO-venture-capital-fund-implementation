@@ -10,8 +10,8 @@ import {
 } from "../bc/daoContract";
 
 export default function Balance() {
-  const [balance, setBalance] = useState<string>("0.00");
-  const [fundTotal, setFundTotal] = useState<string>("0.00");
+  const [balance, setBalance] = useState<string>("0.0");
+  const [fundTotal, setFundTotal] = useState<string>("0");
   const [fundTotalValue, setFundTotalValue] = useState<string>("0.00");
   const [portfolioValue, setPortfolioValue] = useState<string>("0.00");
   const [portfolio, setPortfolio] = useState<Record<string, string>>({});
@@ -21,13 +21,14 @@ export default function Balance() {
   const fetchBalances = async () => {
     try {
       setError("");
-      const { userBalance, fundTotal } = await getBalances();
+      const { userBalance, fundTotalWei } = await getBalances();
       const totalValue = await getFundTotalValue();
       const pValue = await getPortfolioValue();
       const holdings = await getAllPortfolioStocks();
 
-      setBalance(Number(userBalance).toFixed(2));
-      setFundTotal(Number(fundTotal).toFixed(2));
+      // Full-precision token amount so tiny (wei-scale) balances are visible
+      setBalance(userBalance);
+      setFundTotal(fundTotalWei);
       setFundTotalValue(Number(totalValue).toFixed(2));
       setPortfolioValue(Number(pValue).toFixed(2));
       setPortfolio(holdings);
@@ -91,7 +92,7 @@ export default function Balance() {
     <div>
       <p style={{ marginBottom: "0.5rem" }}>
         Your Balance: <strong>{balance} HFT</strong> | Fund Total:{" "}
-        <strong>{fundTotal} ETH</strong>
+        <strong>{fundTotal} wei</strong>
       </p>
       <p style={{ marginBottom: "0.5rem", color: "#666", fontSize: "0.9rem" }}>
         Fund Value: <strong>${fundTotalValue}</strong> | Portfolio:{" "}
