@@ -9,7 +9,7 @@ interface IHedgeFundDAO {
     );
     function executeProposal(
         uint256 proposalId, uint256 ethSpent, uint256 ethGained, uint8 stock, uint256 stockAmount, bool isBuy
-    ) external payable;
+    ) external;
     // Broker deposit helpers
     function brokerDepositOf(address broker) external view returns (uint256);
     function requiredBrokerDeposit() external view returns (uint256);

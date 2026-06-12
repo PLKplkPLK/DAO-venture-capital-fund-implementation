@@ -64,7 +64,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     address public nftContract;
     // Broker deposit tracking — brokers must post a deposit before executing proposals
     mapping(address => uint256) public brokerDeposits;
-    uint256 public immutable requiredBrokerDeposit = 100 ether;
+    uint256 public constant requiredBrokerDeposit = 100 ether;
 
     // ========== Audit State Variables ==========
     
@@ -75,7 +75,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     mapping(uint256 => mapping(address => bool)) public hasVotedInAudit;
     
     /// @notice Time window allowed for governance participants to audit a trade (e.g., 3 days or 5 minutes for local testing)
-    uint256 public immutable auditDuration = 2 minutes;
+    uint256 public constant auditDuration = 2 minutes;
 
     // ========== Events ==========
 
@@ -327,14 +327,16 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
         if (isBuy) {
             require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
+            // The broker is simulated: no real asset is purchased off-chain, so
+            // the ETH stays inside the DAO. We only move value internally from the
+            // liquid cash balance into the portfolio holdings (priced via oracle).
+            // Sending ETH out to a broker with no withdrawal path would lock it
+            // permanently and make the fund insolvent on redemption.
             cashBalance -= ethSpent;
             // store portfolio amounts in 1e18 units for consistency with price oracle
             portfolio[stock] += stockAmount;
 
             proposal.executed = true;
-
-            (bool success, ) = payable(msg.sender).call{value: ethSpent}("");
-            require(success, "ETH transfer to Broker failed");
         } else {
             // Sell: stockAmount passed in whole-units, compare with scaled portfolio
             uint256 scaledAmount = stockAmount;
@@ -461,7 +463,6 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             try INFTContract(nftContract).getTransactionBroker(nftTokenId) returns (address b) {
                 broker = b;
             } catch {
-                audit.auditClosed = true;
                 emit AuditFinalized(nftTokenId, false, 0);
                 return;
             }

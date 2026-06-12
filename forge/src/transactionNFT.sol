@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title TransactionNFT
 /// @notice Portfolio positions represented as NFTs minted by the Broker and owned by the DAO Treasury.

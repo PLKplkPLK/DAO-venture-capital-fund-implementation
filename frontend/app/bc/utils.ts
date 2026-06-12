@@ -26,7 +26,7 @@ const DAO_CONTRACT_ABI = [
   "function proposals(uint256) view returns (uint256 id, uint8 toBuy, uint256 buyAmount, uint8 toSell, uint256 sellAmount, uint256 yesVotes, uint256 noVotes, uint256 snapshotBlock, uint256 endTime, bool executed)",
   "function createBuyProposal(uint8 toBuy, uint256 buyAmount)",
   "function createSellProposal(uint8 toSell, uint256 sellAmount)",
-  "function executeProposal(uint256 proposalId, uint256 ethSpent, uint256 ethGained, uint8 stock, uint256 stockAmount, bool isBuy) payable",
+  "function executeProposal(uint256 proposalId, uint256 ethSpent, uint256 ethGained, uint8 stock, uint256 stockAmount, bool isBuy)",
   "function vote(uint256 proposalId, uint8 choice)",
   "function getFundTotalValue() view returns (uint256)",
   "function priceOracle() view returns (address)",
