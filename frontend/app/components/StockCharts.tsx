@@ -6,7 +6,8 @@ import {
   getStockPrice,
   StockPrice,
   PriceHistory,
-} from "../bc/priceOracle";
+} from "../yahoo/priceYahoo";
+import { getPriceForStock } from "../bc/daoContract";
 
 const STOCK_LABELS = ["BTC", "LINK", "ETH"];
 const COLORS = ["#0b66ff", "#d63333", "#00a854"];
@@ -86,6 +87,8 @@ export default function StockCharts() {
   const [mounted, setMounted] = useState(false);
   const [prices, setPrices] = useState<StockPrice[]>([]);
   const [history, setHistory] = useState<PriceHistory[]>([[], [], []]);
+  // Current on-chain prices from the deployed Chainlink oracle (USD).
+  const [oraclePrices, setOraclePrices] = useState<string[]>(["0", "0", "0"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
@@ -107,6 +110,19 @@ export default function StockCharts() {
           getStockPriceHistory(2, 30),
         ]);
         setHistory([hist0, hist1, hist2]);
+
+        // Fetch current on-chain oracle prices. Isolated so a wallet/oracle
+        // hiccup can't break the Yahoo-based charts above.
+        try {
+          const [o0, o1, o2] = await Promise.all([
+            getPriceForStock(0),
+            getPriceForStock(1),
+            getPriceForStock(2),
+          ]);
+          setOraclePrices([o0, o1, o2]);
+        } catch (oracleErr) {
+          console.warn("Failed to fetch on-chain oracle prices:", oracleErr);
+        }
       } catch (err) {
         console.error("Error fetching prices:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch prices");
@@ -216,6 +232,18 @@ export default function StockCharts() {
                 {price.change24h >= 0 ? "+" : ""}
                 {price.change24h.toFixed(2)}%
               </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: "0.5rem",
+                paddingTop: "0.5rem",
+                borderTop: "1px solid #eee",
+                fontSize: "0.9rem",
+              }}
+            >
+              <span style={{ color: "#666" }}>Oracle price (on-chain): </span>
+              <strong>${Number(oraclePrices[idx]).toFixed(2)}</strong>
             </div>
 
             <div style={{ marginTop: "1rem" }}>
