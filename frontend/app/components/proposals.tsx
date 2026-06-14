@@ -124,25 +124,6 @@ export default function Proposals() {
     }
   };
 
-  // New handler function for execution
-  const handleExecute = async (proposalId: number) => {
-    setStatusMessage("");
-    setErrorMessage("");
-    setExecutingProposal(proposalId);
-
-    try {
-      await executeProposal(proposalId);
-      setStatusMessage(`Proposal #${proposalId} executed successfully!`);
-      await loadProposals();
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to execute proposal",
-      );
-    } finally {
-      setExecutingProposal(null);
-    }
-  };
-
   const formatTimestamp = (timestamp: bigint) => {
     return new Date(Number(timestamp) * 1000).toLocaleString();
   };
@@ -517,52 +498,57 @@ export default function Proposals() {
                             <button
                               disabled={votingProposal === proposal.id}
                               onClick={() => void handleVote(proposal.id, 1)}
-                              style={{
-                                padding: "0.5rem 0.75rem",
-                                border: "1px solid #0b66ff",
-                                borderRadius: "5px",
-                                background: "#eef4ff",
-                                cursor: "pointer",
-                              }}
+                              style={{ padding: "0.5rem 0.75rem", border: "1px solid #0b66ff", borderRadius: "5px", background: "#eef4ff", cursor: "pointer" }}
                             >
                               Vote Yes
                             </button>
                             <button
                               disabled={votingProposal === proposal.id}
                               onClick={() => void handleVote(proposal.id, 2)}
-                              style={{
-                                padding: "0.5rem 0.75rem",
-                                border: "1px solid #d63333",
-                                borderRadius: "5px",
-                                background: "#fff0f0",
-                                cursor: "pointer",
-                              }}
+                              style={{ padding: "0.5rem 0.75rem", border: "1px solid #d63333", borderRadius: "5px", background: "#fff0f0", cursor: "pointer" }}
                             >
                               Vote No
                             </button>
                           </>
                         ) : passed && !proposal.executed ? (
-                          <button
-                            disabled={executingProposal === proposal.id}
-                            onClick={() => void handleExecute(proposal.id)}
-                            style={{
-                              padding: "0.6rem 1rem",
-                              width: "100%",
-                              border: "1px solid green",
-                              borderRadius: "5px",
-                              background: "#e6f4ea",
-                              color: "green",
-                              fontWeight: "bold",
-                              cursor:
-                                executingProposal === proposal.id
-                                  ? "not-allowed"
-                                  : "pointer",
-                            }}
-                          >
-                            {executingProposal === proposal.id
-                              ? "Executing..."
-                              : "⚙ Execute Proposal"}
-                          </button>
+                          <div style={{
+                            padding: "0.6rem 1rem",
+                            width: "100%",
+                            textAlign: "center",
+                            borderRadius: "5px",
+                            background: "#f3e8ff",
+                            color: "purple",
+                            fontWeight: "bold",
+                            border: "1px solid purple"
+                          }}>
+                            Sent to Broker
+                          </div>
+                        ) : proposal.executed ? (
+                          <div style={{
+                            padding: "0.6rem 1rem",
+                            width: "100%",
+                            textAlign: "center",
+                            borderRadius: "5px",
+                            background: "#e6f4ea",
+                            color: "green",
+                            fontWeight: "bold",
+                            border: "1px solid green"
+                          }}>
+                            Order Executed by Broker
+                          </div>
+                        ) : failed ? (
+                          <div style={{
+                            padding: "0.6rem 1rem",
+                            width: "100%",
+                            textAlign: "center",
+                            borderRadius: "5px",
+                            background: "#fff0f0",
+                            color: "#d63333",
+                            fontWeight: "bold",
+                            border: "1px solid #d63333"
+                          }}>
+                            Rejected by DAO Voting
+                          </div>
                         ) : null}
                       </div>
                     </div>
@@ -753,52 +739,57 @@ export default function Proposals() {
                             <button
                               disabled={votingProposal === proposal.id}
                               onClick={() => void handleVote(proposal.id, 1)}
-                              style={{
-                                padding: "0.5rem 0.75rem",
-                                border: "1px solid #0b66ff",
-                                borderRadius: "5px",
-                                background: "#eef4ff",
-                                cursor: "pointer",
-                              }}
+                              style={{ padding: "0.5rem 0.75rem", border: "1px solid #0b66ff", borderRadius: "5px", background: "#eef4ff", cursor: "pointer" }}
                             >
                               Vote Yes
                             </button>
                             <button
                               disabled={votingProposal === proposal.id}
                               onClick={() => void handleVote(proposal.id, 2)}
-                              style={{
-                                padding: "0.5rem 0.75rem",
-                                border: "1px solid #d63333",
-                                borderRadius: "5px",
-                                background: "#fff0f0",
-                                cursor: "pointer",
-                              }}
+                              style={{ padding: "0.5rem 0.75rem", border: "1px solid #d63333", borderRadius: "5px", background: "#fff0f0", cursor: "pointer" }}
                             >
                               Vote No
                             </button>
                           </>
                         ) : passed && !proposal.executed ? (
-                          <button
-                            disabled={executingProposal === proposal.id}
-                            onClick={() => void handleExecute(proposal.id)}
-                            style={{
-                              padding: "0.6rem 1rem",
-                              width: "100%",
-                              border: "1px solid green",
-                              borderRadius: "5px",
-                              background: "#e6f4ea",
-                              color: "green",
-                              fontWeight: "bold",
-                              cursor:
-                                executingProposal === proposal.id
-                                  ? "not-allowed"
-                                  : "pointer",
-                            }}
-                          >
-                            {executingProposal === proposal.id
-                              ? "Executing..."
-                              : "⚙ Execute Proposal"}
-                          </button>
+                          <div style={{
+                            padding: "0.6rem 1rem",
+                            width: "100%",
+                            textAlign: "center",
+                            borderRadius: "5px",
+                            background: "#f3e8ff",
+                            color: "purple",
+                            fontWeight: "bold",
+                            border: "1px solid purple"
+                          }}>
+                            Sent to Broker 
+                          </div>
+                        ) : proposal.executed ? (
+                          <div style={{
+                            padding: "0.6rem 1rem",
+                            width: "100%",
+                            textAlign: "center",
+                            borderRadius: "5px",
+                            background: "#e6f4ea",
+                            color: "green",
+                            fontWeight: "bold",
+                            border: "1px solid green"
+                          }}>
+                            Order Executed by Broker
+                          </div>
+                        ) : failed ? (
+                          <div style={{
+                            padding: "0.6rem 1rem",
+                            width: "100%",
+                            textAlign: "center",
+                            borderRadius: "5px",
+                            background: "#fff0f0",
+                            color: "#d63333",
+                            fontWeight: "bold",
+                            border: "1px solid #d63333"
+                          }}>
+                            Rejected by DAO Voting
+                          </div>
                         ) : null}
                       </div>
                     </div>

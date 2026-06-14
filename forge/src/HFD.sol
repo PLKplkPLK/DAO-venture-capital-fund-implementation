@@ -17,6 +17,10 @@ interface IPriceOracle {
     function getPrice(uint8 stock) external view returns (uint256);
 }
 
+interface INFTContract {
+    function getTransactionBroker(uint256 tokenId) external view returns (address);
+}
+
 /// @dev Represents a trading proposal in the DAO
 struct Proposal {
     uint256 id;              // Unique proposal identifier
@@ -29,6 +33,17 @@ struct Proposal {
     uint256 snapshotBlock;   // Block number for voting power snapshot
     uint256 endTime;         // Voting period end time
     bool executed;           // Whether proposal has been executed
+}
+
+/// @dev Structure representing an governance audit for a broker's trade execution
+struct Audit {
+    uint256 nftTokenId;          // Unique ID of the minted receipt NFT
+    uint256 proposalId;         // The baseline DAO trading proposal ID
+    uint256 approveVotes;       // Total voting power backing the broker's performance
+    uint256 slashVotes;         // Total voting power demanding a penalty (slashing)
+    uint256 auditEndTime;       // Timestamp when the audit voting phase expires
+    bool auditClosed;           // Flag indicating if the audit has been resolved on-chain
+    bool brokerSlashed;         // Flag indicating if the broker was penalized (-50% deposit)
 }
 
 /// @dev A decentralized hedge fund managed through governance voting
@@ -45,6 +60,22 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
     IPriceOracle public priceOracle;
     address public owner; 
+    address public brokerContract;
+    address public nftContract;
+    // Broker deposit tracking — brokers must post a deposit before executing proposals
+    mapping(address => uint256) public brokerDeposits;
+    uint256 public immutable requiredBrokerDeposit = 100 ether;
+
+    // ========== Audit State Variables ==========
+    
+    /// @notice Maps each unique NFT Token ID to its corresponding Audit lifecycle data
+    mapping(uint256 => Audit) public audits;
+    
+    /// @notice Tracks whether an address has already participated in a specific NFT audit
+    mapping(uint256 => mapping(address => bool)) public hasVotedInAudit;
+    
+    /// @notice Time window allowed for governance participants to audit a trade (e.g., 3 days or 5 minutes for local testing)
+    uint256 public immutable auditDuration = 2 minutes;
 
     // ========== Events ==========
 
@@ -67,6 +98,16 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         uint256 ethGained
     );
     event PriceOracleUpdated(address newOracle);
+    event AuditVoteSubmitted(
+        uint256 indexed nftTokenId, 
+        address indexed voter, 
+        uint8 choice, uint256 weight
+    );
+    event AuditFinalized(
+        uint256 indexed nftTokenId, 
+        bool slashed, 
+        uint256 amountSlashed
+    );
 
     // ========== Modifiers ==========
 
@@ -75,10 +116,53 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         _;
     }
 
+    modifier onlyBrokerContract() {
+        require(msg.sender == brokerContract, "Caller is not the Broker Contract");
+        _;
+    }
+
     // ========== Constructor ==========
 
     constructor() ERC20("HF Token", "HF") ERC20Permit("HF Token") {
         owner = msg.sender;
+    }
+    
+    // ========== Setters ==========
+
+    function setBroker(address _brokerContract) external onlyOwner {
+        brokerContract = _brokerContract;
+    }
+
+    function setNFTContract(address _nftContract) external onlyOwner {
+        nftContract = _nftContract;
+    }
+
+    // ========== Deposit ==========
+
+    /// @notice Broker can deposit ETH to be eligible to execute proposals
+    function depositBroker() external payable {
+        require(msg.value > 0, "Deposit must be > 0");
+        brokerDeposits[msg.sender] += msg.value;
+    }
+
+    /// @notice Broker may withdraw their deposit (if not slashed)
+    function withdrawBrokerDeposit(uint256 amount) external {
+        require(brokerDeposits[msg.sender] >= amount, "Not enough deposit");
+        brokerDeposits[msg.sender] -= amount;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "ETH transfer failed");
+    }
+
+    /// @notice View broker deposit for address
+    function brokerDepositOf(address broker) external view returns (uint256) {
+        return brokerDeposits[broker];
+    }
+
+    /// @notice Slash a broker's deposit (collect into DAO cashBalance). Restricted to owner for now.
+    function slashBrokerDeposit(address broker, uint256 amount) external onlyOwner {
+        require(brokerDeposits[broker] >= amount, "Not enough deposit to slash");
+        brokerDeposits[broker] -= amount;
+        cashBalance += amount;
     }
 
     // ========== Fund Management ==========
@@ -156,7 +240,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             yesVotes: 0,
             noVotes: 0,
             snapshotBlock: block.number,
-            endTime: block.timestamp + 3 minutes,
+            endTime: block.timestamp + 1 minutes,
             executed: false
         });
 
@@ -185,7 +269,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             yesVotes: 0,
             noVotes: 0,
             snapshotBlock: block.number,
-            endTime: block.timestamp + 3 minutes,
+            endTime: block.timestamp + 1 minutes,
             executed: false
         });
 
@@ -218,42 +302,48 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         emit Voted(proposalId, msg.sender, choice, weight);
     }
 
-    /// @notice Execute an approved proposal
-    /// @dev Sells are processed before buys to ensure liquidity availability
-    /// @param proposalId ID of the proposal to execute
-    function executeProposal(uint256 proposalId) external {
+    /// @notice This function is called by the Broker contract to update the DAO's portfolio state.
+    function executeProposal(
+        uint256 proposalId, 
+        uint256 ethSpent, 
+        uint256 ethGained, 
+        uint8 stock, 
+        uint256 stockAmount, 
+        bool isBuy
+    ) external {
+        // Basic existence check
+        if (proposalId >= nextProposalId) revert("Proposal missing");
+
         Proposal storage proposal = proposals[proposalId];
-        require(proposalId < nextProposalId, "Proposal missing");
-        require(!proposal.executed, "Already executed");
+
+        // Ensure voting period ended
         require(block.timestamp >= proposal.endTime, "Voting active");
+
+        // Ensure not already executed
+        require(!proposal.executed, "Already executed");
+
+        // Ensure proposal passed
         require(proposal.yesVotes > proposal.noVotes, "Proposal failed");
-        require(address(priceOracle) != address(0), "Oracle not configured");
 
-        uint256 ethGained = 0;
-        uint256 ethSpent = 0;
-
-        // Process Sells First (to release cash pool liquidity)
-        if (proposal.toSell < 3) {
-            uint256 sellPrice = priceOracle.getPrice(proposal.toSell);
-            ethGained = (proposal.sellAmount * sellPrice) / 1e18;
-
-            portfolio[proposal.toSell] -= proposal.sellAmount;
-            cashBalance += ethGained;
-        }
-
-        // Process Buys (using released liquidity + existing cash)
-        if (proposal.toBuy < 3) {
-            ethSpent = proposal.buyAmount;
+        if (isBuy) {
             require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
-
-            uint256 buyPrice = priceOracle.getPrice(proposal.toBuy);
-            uint256 stockGained = (ethSpent * 1e18) / buyPrice;
-
             cashBalance -= ethSpent;
-            portfolio[proposal.toBuy] += stockGained;
+            // store portfolio amounts in 1e18 units for consistency with price oracle
+            portfolio[stock] += stockAmount * 1e18;
+
+            proposal.executed = true;
+
+            (bool success, ) = payable(msg.sender).call{value: ethSpent}("");
+            require(success, "ETH transfer to Broker failed");
+        } else {
+            // Sell: stockAmount passed in whole-units, compare with scaled portfolio
+            uint256 scaledAmount = stockAmount * 1e18;
+            require(portfolio[stock] >= scaledAmount, "Not enough stock to sell");
+            portfolio[stock] -= scaledAmount;
+            cashBalance += ethGained;
+            proposal.executed = true;
         }
 
-        proposal.executed = true;
         emit ProposalExecuted(proposalId, ethSpent, ethGained);
     }
 
@@ -292,5 +382,103 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
     function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
         return super.nonces(owner);
+    }
+
+    // ========== Audit Functions ==========
+    /**
+     * @notice Initializes a public governance audit for a freshly minted trade certificate NFT.
+     * @dev Called automatically by the Broker Contract upon calling executeOrder() / minting the certificate.
+     * @param nftTokenId The ID of the token minted as a trade receipt.
+     * @param proposalId The ID of the proposal executed by the broker.
+     */
+    function initializeAudit(uint256 nftTokenId, uint256 proposalId) external {
+        require(msg.sender == brokerContract || msg.sender == owner, "Only the Broker Contract or Owner can initialize audits");
+        require(audits[nftTokenId].auditEndTime == 0, "Audit for this transaction is already initialized");
+
+        audits[nftTokenId] = Audit({
+            nftTokenId: nftTokenId,
+            proposalId: proposalId,
+            approveVotes: 0,
+            slashVotes: 0,
+            auditEndTime: block.timestamp + auditDuration,
+            auditClosed: false,
+            brokerSlashed: false
+        });
+    }
+
+    /**
+     * @notice Casts a vote evaluating the broker's trade execution.
+     * @dev Restricted strictly to users who voted on the original proposal to prevent governance manipulation.
+     * @param nftTokenId The ID of the transaction receipt NFT being audited.
+     * @param choice 1 = Approve (Execution was fair), 2 = Slash (Broker cheated/slippage was excessive)
+     */
+    function voteOnAudit(uint256 nftTokenId, uint8 choice) external {
+        Audit storage audit = audits[nftTokenId];
+        require(audit.auditEndTime > 0, "Audit process not found for this NFT");
+        require(block.timestamp < audit.auditEndTime, "Audit voting period has expired");
+        require(!audit.auditClosed, "Audit has already been finalized");
+        require(!hasVotedInAudit[nftTokenId][msg.sender], "Account has already voted in this audit");
+        require(choice == 1 || choice == 2, "Invalid parameter: 1=Approve, 2=Slash");
+
+        // GATEKEEPER CONDITION: Check if the user participated in the trading proposal voting phase
+        uint8 originalVote = userVotes[audit.proposalId][msg.sender];
+        require(originalVote == 1 || originalVote == 2, "You did not participate in the  proposal voting");
+
+        // Retrieve historical voting weight at the original proposal's snapshot block to guarantee fairness
+        Proposal storage prop = proposals[audit.proposalId];
+        uint256 weight = getPastVotes(msg.sender, prop.snapshotBlock);
+        require(weight > 0, "Zero voting weight registered at snapshot block");
+
+        if (choice == 1) {
+            audit.approveVotes += weight;
+        } else {
+            audit.slashVotes += weight;
+        }
+
+        hasVotedInAudit[nftTokenId][msg.sender] = true;
+        emit AuditVoteSubmitted(nftTokenId, msg.sender, choice, weight);
+    }
+
+    /**
+     * @notice Finalizes the audit outcome once the voting period lapses.
+     * @dev If the majority votes to Slash, 50% of the broker's posted deposit is seized and deposited into the DAO treasury cash balance.
+     * @param nftTokenId The ID of the transaction receipt NFT being finalized.
+     */
+    function finalizeAudit(uint256 nftTokenId) external {
+        Audit storage audit = audits[nftTokenId];
+        require(audit.auditEndTime > 0, "Audit not initialized");
+        require(block.timestamp >= audit.auditEndTime, "Voting window is still active");
+        require(!audit.auditClosed, "Audit is already resolved");
+
+        require(nftContract != address(0) && nftContract.code.length > 0, "NFT contract not set or has no code");
+
+        audit.auditClosed = true;
+
+        // Evaluate if malicious or sub-optimal execution is determined by governance consensus (Slash > Approve)
+        if (audit.slashVotes > audit.approveVotes) {
+            // Attempt to fetch the broker's account address from the NFT registry; handle failures gracefully
+            address broker;
+            try INFTContract(nftContract).getTransactionBroker(nftTokenId) returns (address b) {
+                broker = b;
+            } catch {
+                audit.auditClosed = true;
+                emit AuditFinalized(nftTokenId, false, 0);
+                return;
+            }
+
+            uint256 currentDeposit = brokerDeposits[broker];
+            if (currentDeposit > 0) {
+                uint256 penalty = currentDeposit / 2; // Slashing penalty factor: 50%
+
+                brokerDeposits[broker] -= penalty;
+                cashBalance += penalty;
+
+                audit.brokerSlashed = true;
+                emit AuditFinalized(nftTokenId, true, penalty);
+                return;
+            }
+        }
+
+        emit AuditFinalized(nftTokenId, false, 0);
     }
 }
