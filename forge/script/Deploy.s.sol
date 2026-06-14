@@ -6,7 +6,7 @@ import {console} from "forge-std/console.sol";
 
 // Import your contracts (adjust the relative paths to match your src/ or contracts/ folder)
 import {ChainlinkPriceOracle} from "../src/oracle_chainlink.sol";
-import {TransactionNFT} from "../src/TransactionNFT.sol";
+import {TransactionNFT} from "../src/transactionNFT.sol";
 import {HedgeFundDAO} from "../src/HFD.sol";
 import {InvestmentBroker} from "../src/broker.sol";
 

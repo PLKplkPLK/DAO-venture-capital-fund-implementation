@@ -22,12 +22,6 @@ forge test
 forge script script/Deploy.s.sol:DeployScript --rpc-url "https://127.0.0.1:8545" --broadcast --verify
 ```
 
-## Local ETH node - Foundry - Anvil
-
-Use wsl on Windows.
-
-`anvil`
-
 # Deployed to Sepolia
 
 ```sh

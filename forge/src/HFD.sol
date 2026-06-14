@@ -5,14 +5,12 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
-/// @dev Enum representing the available stocks the DAO can trade
 enum Stock {
     BTC,
     LINK,
     ETH
 }
 
-/// @dev Interface for price oracle to get stock prices
 interface IPriceOracle {
     function getPrice(uint8 stock) external view returns (uint256);
 }
@@ -21,15 +19,14 @@ interface INFTContract {
     function getTransactionBroker(uint256 tokenId) external view returns (address);
 }
 
-/// @dev Represents a trading proposal in the DAO
 struct Proposal {
-    uint256 id;              // Unique proposal identifier
+    uint256 id;
     uint8 toBuy;             // Stock to buy (255 = none)
     uint256 buyAmount;       // ETH to spend on buying
     uint8 toSell;            // Stock to sell (255 = none)
     uint256 sellAmount;      // Amount of stock to sell
-    uint256 yesVotes;        // Total votes in favor
-    uint256 noVotes;         // Total votes against
+    uint256 yesVotes;        // Total yes votes
+    uint256 noVotes;         // Total no votes
     uint256 snapshotBlock;   // Block number for voting power snapshot
     uint256 endTime;         // Voting period end time
     bool executed;           // Whether proposal has been executed
@@ -37,7 +34,7 @@ struct Proposal {
 
 /// @dev Structure representing an governance audit for a broker's trade execution
 struct Audit {
-    uint256 nftTokenId;          // Unique ID of the minted receipt NFT
+    uint256 nftTokenId;         // Unique ID of the minted receipt NFT
     uint256 proposalId;         // The baseline DAO trading proposal ID
     uint256 approveVotes;       // Total voting power backing the broker's performance
     uint256 slashVotes;         // Total voting power demanding a penalty (slashing)
@@ -46,8 +43,8 @@ struct Audit {
     bool brokerSlashed;         // Flag indicating if the broker was penalized (-50% deposit)
 }
 
-/// @dev A decentralized hedge fund managed through governance voting
 contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
+
     // ========== State Variables ==========
 
     uint256 public nextProposalId;
@@ -66,15 +63,11 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     mapping(address => uint256) public brokerDeposits;
     uint256 public constant requiredBrokerDeposit = 100 ether;
 
-    // ========== Audit State Variables ==========
-    
+    // ========== Audit Variables ==========
+
     /// @notice Maps each unique NFT Token ID to its corresponding Audit lifecycle data
     mapping(uint256 => Audit) public audits;
-    
-    /// @notice Tracks whether an address has already participated in a specific NFT audit
     mapping(uint256 => mapping(address => bool)) public hasVotedInAudit;
-    
-    /// @notice Time window allowed for governance participants to audit a trade (e.g., 3 days or 5 minutes for local testing)
     uint256 public constant auditDuration = 2 minutes;
 
     // ========== Events ==========
