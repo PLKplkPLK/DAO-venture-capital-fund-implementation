@@ -123,7 +123,7 @@ export default function BrokerPage() {
     setStatusMessage("");
     setErrorMessage("");
     if (!depositAmount || Number(depositAmount) <= 0) {
-      setErrorMessage("Enter a deposit amount > 0 ETH");
+      setErrorMessage("Enter a deposit amount > 0 wei");
       return;
     }
     setDepositing(true);
@@ -184,7 +184,7 @@ export default function BrokerPage() {
           <div style={{ marginBottom: "1.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <input
               type="text"
-              placeholder="Deposit amount (ETH)"
+              placeholder="Deposit amount (wei)"
               value={depositAmount}
               onChange={(e) => setDepositAmount(e.target.value)}
               style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px", width: "220px" }}

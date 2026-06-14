@@ -5,14 +5,12 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
-/// @dev Enum representing the available stocks the DAO can trade
 enum Stock {
-    SP500,  // 0 - S&P 500
-    Wheat,  // 1 - Wheat
-    Apple   // 2 - Apple
+    BTC,
+    LINK,
+    ETH
 }
 
-/// @dev Interface for price oracle to get stock prices
 interface IPriceOracle {
     function getPrice(uint8 stock) external view returns (uint256);
 }
@@ -21,15 +19,14 @@ interface INFTContract {
     function getTransactionBroker(uint256 tokenId) external view returns (address);
 }
 
-/// @dev Represents a trading proposal in the DAO
 struct Proposal {
-    uint256 id;              // Unique proposal identifier
+    uint256 id;
     uint8 toBuy;             // Stock to buy (255 = none)
     uint256 buyAmount;       // ETH to spend on buying
     uint8 toSell;            // Stock to sell (255 = none)
     uint256 sellAmount;      // Amount of stock to sell
-    uint256 yesVotes;        // Total votes in favor
-    uint256 noVotes;         // Total votes against
+    uint256 yesVotes;        // Total yes votes
+    uint256 noVotes;         // Total no votes
     uint256 snapshotBlock;   // Block number for voting power snapshot
     uint256 endTime;         // Voting period end time
     bool executed;           // Whether proposal has been executed
@@ -37,7 +34,7 @@ struct Proposal {
 
 /// @dev Structure representing an governance audit for a broker's trade execution
 struct Audit {
-    uint256 nftTokenId;          // Unique ID of the minted receipt NFT
+    uint256 nftTokenId;         // Unique ID of the minted receipt NFT
     uint256 proposalId;         // The baseline DAO trading proposal ID
     uint256 approveVotes;       // Total voting power backing the broker's performance
     uint256 slashVotes;         // Total voting power demanding a penalty (slashing)
@@ -46,8 +43,8 @@ struct Audit {
     bool brokerSlashed;         // Flag indicating if the broker was penalized (-50% deposit)
 }
 
-/// @dev A decentralized hedge fund managed through governance voting
 contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
+
     // ========== State Variables ==========
 
     uint256 public nextProposalId;
@@ -64,18 +61,14 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
     address public nftContract;
     // Broker deposit tracking — brokers must post a deposit before executing proposals
     mapping(address => uint256) public brokerDeposits;
-    uint256 public immutable requiredBrokerDeposit = 100 ether;
+    uint256 public constant requiredBrokerDeposit = 100 ether;
 
-    // ========== Audit State Variables ==========
-    
+    // ========== Audit Variables ==========
+
     /// @notice Maps each unique NFT Token ID to its corresponding Audit lifecycle data
     mapping(uint256 => Audit) public audits;
-    
-    /// @notice Tracks whether an address has already participated in a specific NFT audit
     mapping(uint256 => mapping(address => bool)) public hasVotedInAudit;
-    
-    /// @notice Time window allowed for governance participants to audit a trade (e.g., 3 days or 5 minutes for local testing)
-    uint256 public immutable auditDuration = 2 minutes;
+    uint256 public constant auditDuration = 2 minutes;
 
     // ========== Events ==========
 
@@ -310,7 +303,7 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         uint8 stock, 
         uint256 stockAmount, 
         bool isBuy
-    ) external {
+    ) external  onlyBrokerContract {
         // Basic existence check
         if (proposalId >= nextProposalId) revert("Proposal missing");
 
@@ -327,17 +320,19 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
 
         if (isBuy) {
             require(cashBalance >= ethSpent, "Insufficient liquid cash in DAO");
+            // The broker is simulated: no real asset is purchased off-chain, so
+            // the ETH stays inside the DAO. We only move value internally from the
+            // liquid cash balance into the portfolio holdings (priced via oracle).
+            // Sending ETH out to a broker with no withdrawal path would lock it
+            // permanently and make the fund insolvent on redemption.
             cashBalance -= ethSpent;
             // store portfolio amounts in 1e18 units for consistency with price oracle
-            portfolio[stock] += stockAmount * 1e18;
+            portfolio[stock] += stockAmount;
 
             proposal.executed = true;
-
-            (bool success, ) = payable(msg.sender).call{value: ethSpent}("");
-            require(success, "ETH transfer to Broker failed");
         } else {
             // Sell: stockAmount passed in whole-units, compare with scaled portfolio
-            uint256 scaledAmount = stockAmount * 1e18;
+            uint256 scaledAmount = stockAmount;
             require(portfolio[stock] >= scaledAmount, "Not enough stock to sell");
             portfolio[stock] -= scaledAmount;
             cashBalance += ethGained;
@@ -380,8 +375,8 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
         super._update(from, to, value);
     }
 
-    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
-        return super.nonces(owner);
+    function nonces(address account) public view override(ERC20Permit, Nonces) returns (uint256) {
+        return super.nonces(account);
     }
 
     // ========== Audit Functions ==========
@@ -461,7 +456,6 @@ contract HedgeFundDAO is ERC20, ERC20Permit, ERC20Votes {
             try INFTContract(nftContract).getTransactionBroker(nftTokenId) returns (address b) {
                 broker = b;
             } catch {
-                audit.auditClosed = true;
                 emit AuditFinalized(nftTokenId, false, 0);
                 return;
             }

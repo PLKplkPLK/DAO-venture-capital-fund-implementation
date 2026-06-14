@@ -7,10 +7,10 @@ interface IPriceOracle {
 
 contract MockPriceOracle is IPriceOracle {
     // Mock prices with normal distribution
-    // Stock 0: S&P 500 - mean: 7500, sd: 75
-    // Stock 1: Wheat - mean: 25, sd: 0.25
-    // Stock 2: Apple - mean: 300, sd: 3
-    
+    // Stock 0: BTC - mean: 7500, sd: 75
+    // Stock 1: LINK - mean: 25, sd: 0.25
+    // Stock 2: ETH - mean: 300, sd: 3
+
     address public owner;
 
     event PriceUpdated(uint8 indexed stock, uint256 newPrice);
@@ -26,18 +26,15 @@ contract MockPriceOracle is IPriceOracle {
 
     function getPrice(uint8 stock) external view override returns (uint256) {
         require(stock < 3, "Invalid stock ID");
-        
+
         uint256 randomValue = _generateRandomNumber(stock);
         int256 normalizedValue = _boxMullerApproximation(randomValue);
-        
+
         if (stock == 0) {
-            // S&P 500: mean 7500, sd 75
             return _calculatePrice(7500 * 1e18, 75 * 1e18, normalizedValue);
         } else if (stock == 1) {
-            // Wheat: mean 25, sd 0.25
             return _calculatePrice(25 * 1e18, 25 * 1e16, normalizedValue);
         } else {
-            // Apple: mean 300, sd 3
             return _calculatePrice(300 * 1e18, 3 * 1e18, normalizedValue);
         }
     }
@@ -53,14 +50,14 @@ contract MockPriceOracle is IPriceOracle {
 
     function _boxMullerApproximation(uint256 seed) private pure returns (int256) {
         // Simplified Box-Muller approximation to get a normal distribution
-        
+
         uint256 u1 = (seed % 1000000) + 1;
         uint256 u2 = ((seed / 1000000) % 1000000) + 1;
-        
+
         int256 z = int256(u1) - 500000;
         z += int256(u2) - 500000;
         z = z / 2;
-        
+
         return z;
     }
 
@@ -70,11 +67,11 @@ contract MockPriceOracle is IPriceOracle {
         int256 zScore
     ) private pure returns (uint256) {
         int256 price = int256(mean) + (zScore * int256(sd)) / 1e18;
-        
+
         if (price <= 0) {
             price = int256(mean) / 2;
         }
-        
+
         return uint256(price);
     }
 }

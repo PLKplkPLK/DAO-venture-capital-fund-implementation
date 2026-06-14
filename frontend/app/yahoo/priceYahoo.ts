@@ -13,13 +13,9 @@ export type PriceHistory = {
 }[];
 
 // Yahoo Finance symbols for the stocks
-// ^GSPC = S&P 500 Index
-// WEAT = Teucrium Wheat ETF (more reliable than futures)
-// AAPL = Apple stock
-const STOCK_SYMBOLS = ["^GSPC", "WEAT", "AAPL"];
-const STOCK_LABELS = ["S&P 500", "Wheat", "Apple"];
+const STOCK_SYMBOLS = ["BTC-USD", "LINK-USD", "ETH-USD"];
+const STOCK_LABELS = ["BTC", "LINK", "ETH"];
 
-// Fetch current price for a stock (0=SP500, 1=Wheat, 2=Apple)
 export async function getStockPrice(stockIndex: number): Promise<StockPrice> {
   try {
     const symbol = STOCK_SYMBOLS[stockIndex];

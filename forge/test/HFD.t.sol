@@ -9,9 +9,9 @@ contract MockPriceOracle is IPriceOracle {
     mapping(uint8 => uint256) public prices;
 
     constructor() {
-        prices[0] = 1 ether;  // SP500
-        prices[1] = 0.5 ether; // Wheat
-        prices[2] = 0.1 ether; // Apple
+        prices[0] = 1 ether;  // BTC
+        prices[1] = 0.5 ether; // LINK
+        prices[2] = 0.1 ether; // ETH
     }
 
     function getPrice(uint8 stock) external view returns (uint256) {
@@ -29,12 +29,16 @@ contract HedgeFundDAOTest is Test {
     address user1 = address(0x1);
     address user2 = address(0x2);
     address user3 = address(0x3);
+    // executeProposal is restricted to the registered Broker contract; tests
+    // act as this address when finalizing a trade on the DAO.
+    address broker = address(0xB0B);
 
     function setUp() public {
         hfdao = new HedgeFundDAO();
         oracle = new MockPriceOracle();
         hfdao.setPriceOracle(address(oracle));
-        
+        hfdao.setBroker(broker);
+
         vm.deal(user1, 100 ether);
         vm.deal(user2, 100 ether);
         vm.deal(user3, 100 ether);
@@ -45,10 +49,10 @@ contract HedgeFundDAOTest is Test {
     function test_BuyShares() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
-        assertEq(hfdao.balanceOf(user1), 2 ether); 
+
+        assertEq(hfdao.balanceOf(user1), 2 ether);
         assertEq(address(hfdao).balance, 2 ether);
-        
+
         vm.stopPrank();
     }
 
@@ -56,10 +60,10 @@ contract HedgeFundDAOTest is Test {
         vm.startPrank(user1);
         hfdao.buyShares{value: 5 ether}();
         hfdao.buyShares{value: 3 ether}();
-        
+
         assertEq(hfdao.balanceOf(user1), 8 ether);
         assertEq(address(hfdao).balance, 8 ether); // 8 tokens
-        
+
         vm.stopPrank();
     }
 
@@ -73,37 +77,37 @@ contract HedgeFundDAOTest is Test {
     function test_RetrieveEth() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 5 ether}();
-        
+
         uint256 ethBefore = user1.balance;
         hfdao.retrieveEth(3 ether);
-        
+
         assertEq(hfdao.balanceOf(user1), 2 ether);
         assertEq(user1.balance, ethBefore + 3 ether);
         assertEq(address(hfdao).balance, 2 ether);
-        
+
         vm.stopPrank();
     }
 
     function test_RetrieveEthInsufficientBalance() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 5 ether}();
-        
+
         vm.expectRevert("Not enough tokens");
         hfdao.retrieveEth(10 ether);
-        
+
         vm.stopPrank();
     }
 
     function test_RetrieveAllEth() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 10 ether}();
-        
+
         uint256 ethBefore = user1.balance;
         hfdao.retrieveEth(10 ether);
-        
+
         assertEq(hfdao.balanceOf(user1), 0);
         assertEq(user1.balance, ethBefore + 10 ether);
-        
+
         vm.stopPrank();
     }
 
@@ -112,7 +116,7 @@ contract HedgeFundDAOTest is Test {
     function test_SetPriceOracle() public {
         MockPriceOracle newOracle = new MockPriceOracle();
         hfdao.setPriceOracle(address(newOracle));
-        
+
         assertEq(address(hfdao.priceOracle()), address(newOracle));
     }
 
@@ -128,7 +132,7 @@ contract HedgeFundDAOTest is Test {
         hfdao.buyShares{value: 2 ether}();
 
         vm.prank(user1);
-        hfdao.createBuyProposal(0, 5 ether); // Buy SP500 with 5 ETH
+        hfdao.createBuyProposal(0, 5 ether); // Buy BTC with 5 ETH
 
         (
             uint256 id,
@@ -158,20 +162,20 @@ contract HedgeFundDAOTest is Test {
     function test_CreateBuyProposal_InvalidStock() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
+
         vm.expectRevert("Invalid stock to buy");
         hfdao.createBuyProposal(3, 5 ether); // Invalid stock (>= 3)
-        
+
         vm.stopPrank();
     }
 
     function test_CreateBuyProposal_ZeroBuyAmount() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
+
         vm.expectRevert("Buy amount must be > 0");
         hfdao.createBuyProposal(0, 0);
-        
+
         vm.stopPrank();
     }
 
@@ -189,12 +193,13 @@ contract HedgeFundDAOTest is Test {
         hfdao.vote(0, 1); // Vote yes
 
         vm.warp(block.timestamp + 4 minutes);
-        vm.prank(user1);
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+        // Broker finalizes the buy, crediting 1 unit of BTC to the portfolio.
+        vm.prank(broker);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
 
-        // Now create a sell proposal
+        // Now create a sell proposal (cannot exceed the 1 unit held)
         vm.prank(user1);
-        hfdao.createSellProposal(0, 1 ether);
+        hfdao.createSellProposal(0, 1);
 
         (
             uint256 id,
@@ -213,27 +218,27 @@ contract HedgeFundDAOTest is Test {
         assertEq(toBuy, 255); // 255 = none
         assertEq(buyAmount, 0);
         assertEq(toSell, 0);
-        assertEq(sellAmount, 1 ether);
+        assertEq(sellAmount, 1);
         assertEq(executed, false);
     }
 
     function test_CreateSellProposal_InvalidStock() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
+
         vm.expectRevert("Invalid stock to sell");
         hfdao.createSellProposal(3, 5 ether); // Invalid stock
-        
+
         vm.stopPrank();
     }
 
     function test_CreateSellProposal_ZeroAmount() public {
         vm.startPrank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
+
         vm.expectRevert("Sell amount must be > 0");
         hfdao.createSellProposal(0, 0);
-        
+
         vm.stopPrank();
     }
 
@@ -241,10 +246,10 @@ contract HedgeFundDAOTest is Test {
         // portfolio[0] remains 0
         vm.startPrank(user1);
         hfdao.buyShares{value: 2 ether}();
-        
+
         vm.expectRevert("Not enough stock to sell");
-        hfdao.createSellProposal(0, 10); // Try to sell 10 SP500 but have 0
-        
+        hfdao.createSellProposal(0, 10); // Try to sell 10 BTC but have 0
+
         vm.stopPrank();
     }
 
@@ -260,10 +265,10 @@ contract HedgeFundDAOTest is Test {
         // 1. User1 deposits 10 ETH and activates voting power via delegation
         vm.startPrank(user1);
         hfdao.buyShares{value: 10 ether}();
-        hfdao.delegate(user1); 
-        
+        hfdao.delegate(user1);
+
         // 2. Create the proposal with proper parameters
-        hfdao.createBuyProposal(0, 5 ether); // Buy SP500 with 5 ETH
+        hfdao.createBuyProposal(0, 5 ether); // Buy BTC with 5 ETH
         vm.stopPrank();
 
         // 3. Move forward one block so OpenZeppelin checkpoints update
@@ -456,7 +461,7 @@ contract HedgeFundDAOTest is Test {
 
         vm.roll(block.number + 1);
 
-        // Move time forward past the 3-minute voting period
+        // Move time forward past the 1-minute voting period
         vm.warp(block.timestamp + 4 minutes);
 
         vm.prank(user1);
@@ -494,8 +499,8 @@ contract HedgeFundDAOTest is Test {
         // Move past voting deadline
         vm.warp(block.timestamp + 4 minutes);
 
-        vm.prank(user2);
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+        vm.prank(broker);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
 
         (
             ,
@@ -511,6 +516,26 @@ contract HedgeFundDAOTest is Test {
         ) = hfdao.proposals(0);
 
         assertEq(executed, true);
+    }
+
+    function test_ExecuteProposal_OnlyBrokerContract() public {
+        vm.startPrank(user1);
+        hfdao.buyShares{value: 10 ether}();
+        hfdao.delegate(user1);
+        hfdao.createBuyProposal(0, 5 ether);
+        vm.stopPrank();
+
+        vm.roll(block.number + 1);
+
+        vm.prank(user1);
+        hfdao.vote(0, 1);
+
+        vm.warp(block.timestamp + 4 minutes);
+
+        // A non-broker caller must not be able to finalize trades.
+        vm.prank(user2);
+        vm.expectRevert("Caller is not the Broker Contract");
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
     }
 
     function test_ExecuteProposal_NotPassed() public {
@@ -537,9 +562,9 @@ contract HedgeFundDAOTest is Test {
 
         vm.warp(block.timestamp + 4 minutes);
 
-        vm.prank(user3);
+        vm.prank(broker);
         vm.expectRevert("Proposal failed");
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
     }
 
     function test_ExecuteProposal_AlreadyExecuted() public {
@@ -556,12 +581,12 @@ contract HedgeFundDAOTest is Test {
 
         vm.warp(block.timestamp + 4 minutes);
 
-        vm.prank(user2);
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+        vm.prank(broker);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
 
-        vm.prank(user3);
+        vm.prank(broker);
         vm.expectRevert("Already executed");
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
     }
 
     function test_ExecuteProposal_VotingNotEnded() public {
@@ -577,15 +602,15 @@ contract HedgeFundDAOTest is Test {
         hfdao.vote(0, 1);
 
         // Try to execute before deadline
-        vm.prank(user2);
+        vm.prank(broker);
         vm.expectRevert("Voting active");
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
     }
 
     function test_ExecuteProposal_InvalidId() public {
-        vm.prank(user1);
+        vm.prank(broker);
         vm.expectRevert("Proposal missing");
-        hfdao.finalizeTradeFromBroker(9999, 1, 1, 0, 1, true);
+        hfdao.executeProposal(9999, 1, 1, 0, 1, true);
     }
 
     function test_ExecuteBuyProposal_WithOracleExecution() public {
@@ -603,17 +628,17 @@ contract HedgeFundDAOTest is Test {
         vm.warp(block.timestamp + 4 minutes);
 
         uint256 fundsBeforeExecution = hfdao.cashBalance();
-        
-        vm.prank(user2);
-        hfdao.finalizeTradeFromBroker(0, 1, 1, 0, 1, true);
+
+        vm.prank(broker);
+        hfdao.executeProposal(0, 1, 1, 0, 1, true);
 
         // Verify funds were spent
         uint256 fundsAfterExecution = hfdao.cashBalance();
         assertLt(fundsAfterExecution, fundsBeforeExecution);
-        
+
         // Verify stock was acquired
-        uint256 sp500Holdings = hfdao.getPortfolioStock(0);
-        assertGt(sp500Holdings, 0);
+        uint256 btcHoldings = hfdao.getPortfolioStock(0);
+        assertGt(btcHoldings, 0);
     }
 
     // ============ Portfolio and Value Tests ============
@@ -641,7 +666,7 @@ contract HedgeFundDAOTest is Test {
     function test_GetPortfolioValue_NoOracleSet() public {
         // Create new DAO without oracle
         HedgeFundDAO newDao = new HedgeFundDAO();
-        
+
         uint256 value = newDao.getPortfolioValue();
         assertEq(value, 0);
     }

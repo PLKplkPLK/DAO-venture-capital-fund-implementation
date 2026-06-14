@@ -1,27 +1,21 @@
 import { ethers } from "ethers";
 
-export { 
-  getProvider, 
-  getBrowserProvider, 
-  getContractABI, 
+export {
+  getProvider,
+  getBrowserProvider,
+  getContractABI,
   getContractAddress,
-  getBrokerContractAddress, 
+  getBrokerContractAddress,
   getBrokerContractABI,
   getNFTContractAddress,
-  getNFTContractABI 
+  getNFTContractABI,
 };
 
-const DAO_CONTRACT_ADDRESS =
-  process.env.NEXT_PUBLIC_DAO_CONTRACT_ADDRESS ??
-  "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const DAO_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_DAO_CONTRACT_ADDRESS;
 
-const BROKER_CONTRACT_ADDRESS =
-  process.env.NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS ??
-  "0x71C95911E9a5D330f4D621842EC243EE1343292e";
+const BROKER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS;
 
-const NFT_CONTRACT_ADDRESS =
-  process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS ??
-  "0x8464135c8F25Da09e49BC8782676a84730C318bC";
+const NFT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS;
 
 const DAO_CONTRACT_ABI = [
   "function buyShares() payable",
@@ -32,9 +26,11 @@ const DAO_CONTRACT_ABI = [
   "function proposals(uint256) view returns (uint256 id, uint8 toBuy, uint256 buyAmount, uint8 toSell, uint256 sellAmount, uint256 yesVotes, uint256 noVotes, uint256 snapshotBlock, uint256 endTime, bool executed)",
   "function createBuyProposal(uint8 toBuy, uint256 buyAmount)",
   "function createSellProposal(uint8 toSell, uint256 sellAmount)",
-  "function executeProposal(uint256 proposalId, uint256 ethSpent, uint256 ethGained, uint8 stock, uint256 stockAmount, bool isBuy) payable",  "function vote(uint256 proposalId, uint8 choice)",
+  "function executeProposal(uint256 proposalId, uint256 ethSpent, uint256 ethGained, uint8 stock, uint256 stockAmount, bool isBuy)",
+  "function vote(uint256 proposalId, uint8 choice)",
   "function getFundTotalValue() view returns (uint256)",
   "function priceOracle() view returns (address)",
+  "function totalSupply() view returns (uint256)",
   "function nftContract() view returns (address)",
   "function brokerDepositOf(address) view returns (uint256)",
   "function requiredBrokerDeposit() view returns (uint256)",
@@ -53,7 +49,7 @@ const DAO_CONTRACT_ABI = [
   "function voteOnAudit(uint256 nftTokenId, uint8 choice)",
   "function finalizeAudit(uint256 nftTokenId)",
   "event AuditVoteSubmitted(uint256 indexed nftTokenId, address indexed voter, uint8 choice, uint256 weight)",
-  "event AuditFinalized(uint256 indexed nftTokenId, bool slashed, uint256 amountSlashed)"
+  "event AuditFinalized(uint256 indexed nftTokenId, bool slashed, uint256 amountSlashed)",
 ];
 
 const NFT_CONTRACT_ABI = [
@@ -65,7 +61,7 @@ const NFT_CONTRACT_ABI = [
   "function mintTransaction(uint256 proposalId, uint8 stock, bool isBuy, uint256 stockAmount, uint256 price, address broker) returns (uint256)",
   "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
   "function getTransactionBroker(uint256 tokenId) view returns (address)",
-  "function getTransaction(uint256 tokenId) view returns (uint256 proposalId, uint8 stock, uint8 transactionType, uint256 amount, uint256 price, address broker, uint256 timestamp)"
+  "function getTransaction(uint256 tokenId) view returns (uint256 proposalId, uint8 stock, uint8 transactionType, uint256 amount, uint256 price, address broker, uint256 timestamp)",
 ];
 
 const BROKER_CONTRACT_ABI = [
@@ -75,7 +71,8 @@ const BROKER_CONTRACT_ABI = [
 ];
 
 function getProvider() {
-  return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+  // return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+  return new ethers.JsonRpcProvider(process.env.RPC_URL);
 }
 
 async function getBrowserProvider() {
@@ -90,33 +87,59 @@ async function getBrowserProvider() {
   const provider = new ethers.BrowserProvider(ethereum);
 
   const network = await provider.getNetwork();
-  if (network.chainId !== BigInt(31337)) {
-    console.log("Connected network:", network);
-    throw new Error(`Wrong network. Connected to chain ${network.chainId}`);
+  const expectedChainId = BigInt(
+    process.env.NEXT_PUBLIC_CHAIN_ID ?? "11155111",
+  );
+
+  if (network.chainId !== expectedChainId) {
+    throw new Error(
+      `Wrong network. Expected ${expectedChainId}, got ${network.chainId}`,
+    );
   }
 
   return provider;
+}
+
+function requireAddress(
+  value: string | undefined,
+  envVarName: string,
+): string {
+  if (!value) {
+    throw new Error(
+      `${envVarName} is not configured. Set it in frontend/.env and restart the dev server.`,
+    );
+  }
+  return value;
 }
 
 function getContractABI() {
   return DAO_CONTRACT_ABI;
 }
 
-function getContractAddress() {
-  return DAO_CONTRACT_ADDRESS;
+function getContractAddress(): string {
+  return requireAddress(
+    DAO_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_DAO_CONTRACT_ADDRESS",
+  );
 }
 
-function getBrokerContractAddress() {
-  return BROKER_CONTRACT_ADDRESS; 
+function getBrokerContractAddress(): string {
+  return requireAddress(
+    BROKER_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_BROKER_CONTRACT_ADDRESS",
+  );
 }
 function getBrokerContractABI() {
-  return BROKER_CONTRACT_ABI; 
+  return BROKER_CONTRACT_ABI;
 }
 
-function getNFTContractAddress() {
-  return NFT_CONTRACT_ADDRESS; 
+function getNFTContractAddress(): string {
+  return requireAddress(
+    NFT_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_NFT_CONTRACT_ADDRESS",
+  );
 }
 
 function getNFTContractABI() {
-  return NFT_CONTRACT_ABI; 
+  return NFT_CONTRACT_ABI;
 }

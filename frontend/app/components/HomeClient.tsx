@@ -117,7 +117,7 @@ export default function HomeClient() {
           <form onSubmit={handleDeposit}>
             <input
               type="number"
-              placeholder="Amount in ETH"
+              placeholder="Amount in wei"
               value={depositAmount}
               onChange={(e) =>
                 setDepositAmount((e.target as HTMLInputElement).value)
@@ -141,7 +141,7 @@ export default function HomeClient() {
                 borderRadius: "5px",
               }}
             >
-              Get HF Tokens
+              Deposit (wei)
             </button>
           </form>
         </section>
@@ -159,7 +159,7 @@ export default function HomeClient() {
           <form onSubmit={handleWithdraw}>
             <input
               type="number"
-              placeholder="Amount in HFT"
+              placeholder="Amount in wei"
               value={withdrawAmount}
               onChange={(e) =>
                 setWithdrawAmount((e.target as HTMLInputElement).value)
@@ -183,7 +183,7 @@ export default function HomeClient() {
                 borderRadius: "5px",
               }}
             >
-              Withdraw ETH
+              Withdraw wei
             </button>
           </form>
         </section>

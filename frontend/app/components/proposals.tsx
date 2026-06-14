@@ -187,14 +187,14 @@ export default function Proposals() {
                   marginTop: "0.75rem",
                 }}
               >
-                ETH to Spend
+                Wei to Spend
               </label>
               <input
                 type="number"
-                placeholder="Amount in ETH"
+                placeholder="Amount in wei"
                 value={newBuyAmount}
                 onChange={(e) => setNewBuyAmount(e.target.value)}
-                step="0.01"
+                step="1"
                 min="0"
                 style={{
                   padding: "0.5rem",
@@ -273,14 +273,14 @@ export default function Proposals() {
                   marginTop: "0.75rem",
                 }}
               >
-                Amount to Sell
+                Amount to Sell (base units, 1e18 = 1 unit)
               </label>
               <input
                 type="number"
-                placeholder="Amount in units"
+                placeholder="Amount in base units"
                 value={newSellAmount}
                 onChange={(e) => setNewSellAmount(e.target.value)}
-                step="0.01"
+                step="1"
                 min="0"
                 disabled={newToSell === 255}
                 style={{
