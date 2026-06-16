@@ -42,6 +42,7 @@ contract HedgeFundDAOTest is Test {
         vm.deal(user1, 100 ether);
         vm.deal(user2, 100 ether);
         vm.deal(user3, 100 ether);
+        vm.deal(broker, 100 ether);
     }
 
     // ============ Buy/Retrieve Shares Tests ============
@@ -670,4 +671,195 @@ contract HedgeFundDAOTest is Test {
         uint256 value = newDao.getPortfolioValue();
         assertEq(value, 0);
     }
+
+
+    // ============ Audit Tests ============
+
+    function test_InitializeAudit_OnlyBrokerOrOwnerRevert() public {
+        vm.prank(user1);
+        vm.expectRevert("Only the Broker Contract or Owner can initialize audits");
+        hfdao.initializeAudit(1, 0);
+    }
+
+    function test_VoteOnAudit_WithoutProposalVoteRevert() public {
+        vm.prank(broker);
+        hfdao.initializeAudit(1, 0);
+
+        vm.prank(user2);
+        vm.expectRevert("You did not participate in the  proposal voting");
+        hfdao.voteOnAudit(1, 1);
+    }
+
+    function test_VoteOnAudit_InvalidChoiceRevert() public {
+        vm.startPrank(user1);
+        hfdao.buyShares{value: 10 ether}();
+        hfdao.delegate(user1);
+        
+        hfdao.createBuyProposal(0, 5 ether);
+        uint256 proposalId = 0;
+        vm.stopPrank();
+
+        vm.roll(block.number + 1);
+
+        vm.prank(user1);
+        hfdao.vote(proposalId, 1);
+
+        vm.prank(broker);
+        hfdao.initializeAudit(1, 0);
+
+        vm.prank(user1);
+        vm.expectRevert("Invalid parameter: 1=Approve, 2=Slash");
+        hfdao.voteOnAudit(1, 3);
+    }
+
+    function test_VoteOnAudit_AuditNotInitializedRevert() public {
+        vm.prank(user1);
+        vm.expectRevert("Audit process not found for this NFT");
+        hfdao.voteOnAudit(1, 1);
+    }
+
+    function test_VoteOnAudit_ExpiredRevert() public {
+        vm.prank(broker);
+        hfdao.initializeAudit(1, 0);
+
+        vm.warp(block.timestamp + 2 minutes + 1 seconds);
+
+        vm.prank(user1);
+        vm.expectRevert("Audit voting period has expired");
+        hfdao.voteOnAudit(1, 1);
+    }
+
+    function test_VoteOnAudit_AlreadyVotedRevert() public {
+        vm.startPrank(user1);
+        hfdao.buyShares{value: 10 ether}();
+        hfdao.delegate(user1);
+        hfdao.createBuyProposal(0, 5 ether);
+        uint256 proposalId = 0;
+        vm.stopPrank();
+
+        vm.roll(block.number + 1);
+
+        vm.prank(user1);
+        hfdao.vote(proposalId, 1);
+
+        vm.prank(broker);
+        hfdao.initializeAudit(1, 0);
+
+        vm.prank(user1);
+        hfdao.voteOnAudit(1, 1);
+
+        vm.prank(user1);
+        vm.expectRevert("Account has already voted in this audit");
+        hfdao.voteOnAudit(1, 1);
+    }
+
+    function test_VoteOnAudit_Success() public {
+        vm.startPrank(user1);
+        hfdao.buyShares{value: 10 ether}();
+        hfdao.delegate(user1);
+        hfdao.createBuyProposal(0, 5 ether);
+        uint256 proposalId = 0;
+        vm.stopPrank();
+
+        vm.roll(block.number + 1);
+
+        vm.prank(user1);
+        hfdao.vote(proposalId, 1);
+
+        vm.warp(block.timestamp + 4 minutes);
+
+        uint256 nftTokenId = 1;
+
+        vm.startPrank(broker);
+        hfdao.initializeAudit(nftTokenId, proposalId);
+        hfdao.executeProposal(proposalId, 1, 0, 0, 1, true);
+        vm.stopPrank();
+
+        (, , , , , , , uint256 snapshotBlock, , ) = hfdao.proposals(proposalId);
+        uint256 expectedWeight = hfdao.getPastVotes(user1, snapshotBlock);
+
+        vm.prank(user1);
+        hfdao.voteOnAudit(nftTokenId, 1);
+
+        (,, uint256 approveVotes,,,,) = hfdao.audits(nftTokenId);
+        assertEq(approveVotes, expectedWeight);
+        assertTrue(hfdao.hasVotedInAudit(nftTokenId, user1));
+    }
+
+
+    // ============ Broker Tests ============
+
+    function test_DepositBroker_ZeroValueRevert() public {
+        vm.prank(broker);
+        vm.expectRevert("Deposit must be > 0");
+        hfdao.depositBroker{value: 0}();
+    }
+
+    function test_DepositBroker_Success() public {
+        uint256 depositAmount = 5 ether;
+
+        vm.prank(broker);
+        hfdao.depositBroker{value: depositAmount}();
+
+        assertEq(hfdao.brokerDepositOf(broker), depositAmount);
+        assertEq(address(hfdao).balance, depositAmount);
+    }
+
+    function test_WithdrawBrokerDeposit_InsufficientBalanceRevert() public {
+        vm.prank(broker);
+        hfdao.depositBroker{value: 2 ether}();
+
+        vm.prank(broker);
+        vm.expectRevert("Not enough deposit");
+        hfdao.withdrawBrokerDeposit(5 ether);
+    }
+
+    function test_WithdrawBrokerDeposit_Success() public {
+        uint256 initialDeposit = 10 ether;
+        uint256 withdrawAmount = 4 ether;
+
+        vm.prank(broker);
+        hfdao.depositBroker{value: initialDeposit}();
+
+        uint256 brokerBalanceBefore = broker.balance;
+
+        vm.prank(broker);
+        hfdao.withdrawBrokerDeposit(withdrawAmount);
+
+        assertEq(hfdao.brokerDepositOf(broker), initialDeposit - withdrawAmount);
+        assertEq(broker.balance, brokerBalanceBefore + withdrawAmount);
+    }
+
+    function test_SlashBrokerDeposit_OnlyOwnerRevert() public {
+        vm.prank(broker);
+        hfdao.depositBroker{value: 5 ether}();
+
+        vm.prank(user1);
+        vm.expectRevert("Not the owner");
+        hfdao.slashBrokerDeposit(broker, 2 ether);
+    }
+
+    function test_SlashBrokerDeposit_InsufficientDepositToSlashRevert() public {
+        vm.prank(broker);
+        hfdao.depositBroker{value: 2 ether}();
+
+        vm.expectRevert("Not enough deposit to slash");
+        hfdao.slashBrokerDeposit(broker, 10 ether);
+    }
+
+    function test_SlashBrokerDeposit_Success() public {
+        uint256 brokerCollateral = 5 ether;
+        uint256 slashAmount = 3 ether;
+
+        vm.prank(broker);
+        hfdao.depositBroker{value: brokerCollateral}();
+
+        uint256 cashBalanceBefore = hfdao.cashBalance();
+
+        hfdao.slashBrokerDeposit(broker, slashAmount);
+
+        assertEq(hfdao.brokerDepositOf(broker), brokerCollateral - slashAmount);
+        assertEq(hfdao.cashBalance(), cashBalanceBefore + slashAmount);
+    }
+
 }
