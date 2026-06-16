@@ -13,7 +13,7 @@ import {
   finalizeAudit,
   type AuditData,
 } from "@/app/bc/daoContract";
-import Balance from "../components/balance";
+import Balance from "../portfolio/balance";
 
 const STOCKS = ["BTC", "LINK", "ETH"];
 
@@ -190,19 +190,8 @@ export default function BrokerPortfolioPage() {
           {nfts.map((nft) => {
             const isBuy = nft.type === "BUY";
             const priceNum = Number(nft.price);
-            const rawAmountNum = Number(nft.rawAmount);
-
-            const unitsField = isBuy
-              ? priceNum > 0
-                ? (rawAmountNum / priceNum).toFixed(4)
-                : "0"
-              : rawAmountNum.toFixed(4);
-
-            const ethField = isBuy
-              ? rawAmountNum.toFixed(1)
-              : priceNum > 0
-                ? (rawAmountNum * priceNum).toFixed(1)
-                : "0";
+            const amountNum = Number(nft.rawAmount);
+            const totalCost = priceNum * amountNum;
 
             const isAuditActive =
               nft.audit &&
@@ -308,7 +297,7 @@ export default function BrokerPortfolioPage() {
                         color: isBuy ? "#00875a" : "#de350b",
                       }}
                     >
-                      {unitsField} Units
+                      {amountNum.toFixed(4)} Units
                     </span>
                   </div>
 
@@ -322,7 +311,7 @@ export default function BrokerPortfolioPage() {
                     <span style={{ color: "#666" }}>
                       {isBuy ? "Total Cost" : "Total Revenue"}
                     </span>
-                    <span style={{ fontWeight: 600 }}>{ethField} ETH</span>
+                    <span style={{ fontWeight: 600 }}>{totalCost.toFixed(4)} ETH</span>
                   </div>
 
                   <div
@@ -330,7 +319,7 @@ export default function BrokerPortfolioPage() {
                   >
                     <span style={{ color: "#666" }}>Unit price</span>
                     <span style={{ fontWeight: 600, color: "#d97706" }}>
-                      {Number(nft.price).toFixed(1)} ETH
+                      {priceNum.toFixed(4)} ETH
                     </span>
                   </div>
                 </div>
